@@ -15,7 +15,12 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+import org.apache.maven.model.Activation;
+import org.apache.maven.model.ActivationFile;
+import org.apache.maven.model.ActivationOS;
+import org.apache.maven.model.ActivationProperty;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.Profile;
 import org.apache.maven.model.building.ModelProcessor;
 import org.apache.maven.model.building.ModelSource;
 import org.apache.maven.model.io.ModelParseException;
@@ -64,7 +69,9 @@ final class PomGuard implements ModelProcessor {
             }
             byte[] bytes = readBounded(in, source);
             refuseDtd(bytes, source);
-            return delegate.read(new ByteArrayInputStream(bytes), options);
+            Model model = delegate.read(new ByteArrayInputStream(bytes), options);
+            model.getProfiles().forEach(PomGuard::leaveActivationUnfilled);
+            return model;
         }
     }
 
@@ -87,6 +94,37 @@ final class PomGuard implements ModelProcessor {
     @Override
     public File locatePom(File projectDirectory) {
         return delegate.locatePom(projectDirectory);
+    }
+
+    // The builder fills an activation in without a bound, before anything else, and nothing here
+    // evaluates one: written so, it stays as text.
+    private static void leaveActivationUnfilled(Profile profile) {
+        Activation activation = profile.getActivation();
+        if (activation == null) {
+            return;
+        }
+        activation.setJdk(unfilled(activation.getJdk()));
+        ActivationOS os = activation.getOs();
+        if (os != null) {
+            os.setArch(unfilled(os.getArch()));
+            os.setFamily(unfilled(os.getFamily()));
+            os.setName(unfilled(os.getName()));
+            os.setVersion(unfilled(os.getVersion()));
+        }
+        ActivationProperty property = activation.getProperty();
+        if (property != null) {
+            property.setName(unfilled(property.getName()));
+            property.setValue(unfilled(property.getValue()));
+        }
+        ActivationFile file = activation.getFile();
+        if (file != null) {
+            file.setExists(unfilled(file.getExists()));
+            file.setMissing(unfilled(file.getMissing()));
+        }
+    }
+
+    private static @Nullable String unfilled(@Nullable String value) {
+        return value == null ? null : value.replace("${", "$ {");
     }
 
     // Coordinates no parent can have, so the builder goes on as for a relativePath naming another

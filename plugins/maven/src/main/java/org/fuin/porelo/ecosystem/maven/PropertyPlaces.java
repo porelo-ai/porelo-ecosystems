@@ -1,8 +1,11 @@
 package org.fuin.porelo.ecosystem.maven;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -15,7 +18,8 @@ import org.jspecify.annotations.Nullable;
 /**
  * Follows what filled a value in to whoever wrote it, in the order Maven lets one win. What it
  * cannot follow it names, and the value is then nobody's: guessing would let a forge pass as the
- * person.
+ * person. A trace counts only if it reproduces the value the builder arrived at, since the
+ * builder's ways of filling in are more than can be followed here.
  */
 final class PropertyPlaces {
     static final Pattern EXPRESSION = Pattern.compile("\\$\\{([^}]+)}");
@@ -26,6 +30,8 @@ final class PropertyPlaces {
             Set.of("basedir", "rootDirectory", "build.timestamp", "maven.build.timestamp");
 
     private static final String BUILT_IN_CENTRAL = "maven.repo.central";
+    private static final String BUILT_IN_CENTRAL_URL = "https://repo.maven.apache.org/maven2";
+    private static final int MAX_REPRODUCED_CHARS = 1024 * 1024;
 
     private final ModelBuildingResult result;
     private final Places places;
@@ -49,12 +55,53 @@ final class PropertyPlaces {
         return trace;
     }
 
+    /** Whether what the raw value is traced to, filled in, gives what the builder arrived at. */
+    boolean reproduces(@Nullable String rawValue, @Nullable String effective) {
+        if (rawValue == null) {
+            return effective == null;
+        }
+        return Objects.equals(filled(rawValue, new HashMap<>(), new HashSet<>()), effective);
+    }
+
+    // Remembers each answer, so a value that doubles costs a step per level.
+    private @Nullable String filled(String rawValue, Map<String, String> known, Set<String> open) {
+        StringBuilder result = new StringBuilder();
+        Matcher matcher = EXPRESSION.matcher(rawValue);
+        int end = 0;
+        while (matcher.find()) {
+            result.append(rawValue, end, matcher.start());
+            end = matcher.end();
+            String name = nameIn(matcher);
+            String value = known.get(name);
+            if (value == null) {
+                Found found = open.add(name) ? find(name) : null;
+                value = found == null ? matcher.group() : filled(found.rawValue(), known, open);
+                open.remove(name);
+                if (value == null) {
+                    return null;
+                }
+                if (found != null) {
+                    known.put(name, value);
+                }
+            }
+            result.append(value);
+            if (result.length() > MAX_REPRODUCED_CHARS) {
+                return null;
+            }
+        }
+        return result.append(rawValue, end, rawValue.length()).toString();
+    }
+
+    // The builder drops one leading dot before it looks a name up.
+    private static String nameIn(Matcher matcher) {
+        String written = matcher.group(1);
+        return written.startsWith(".") ? written.substring(1) : written;
+    }
+
     private void collect(String rawValue, Set<String> seen, Trace trace) {
         Matcher matcher = EXPRESSION.matcher(rawValue);
         while (matcher.find()) {
-            // The builder drops one leading dot before it looks a name up.
-            String written = matcher.group(1);
-            String name = written.startsWith(".") ? written.substring(1) : written;
+            String name = nameIn(matcher);
             if (seen.add(name)) {
                 Found found = find(name);
                 if (found == null) {
@@ -73,7 +120,8 @@ final class PropertyPlaces {
         }
         // Under these prefixes the model's fields come before any property.
         if (name.startsWith("project.") || name.startsWith("pom.")) {
-            return field(name.substring(name.indexOf('.') + 1));
+            Found field = field(name.substring(name.indexOf('.') + 1));
+            return field != null ? field : property(name);
         }
         Found property = property(name);
         if (property != null) {
@@ -81,7 +129,7 @@ final class PropertyPlaces {
         }
         // Maven's own last source, which only the super pom asks for.
         return name.equals(BUILT_IN_CENTRAL)
-                ? new Found(new Place("", 0, Origin.MACHINE), "")
+                ? new Found(new Place("", 0, Origin.MACHINE), BUILT_IN_CENTRAL_URL)
                 : field(name);
     }
 
@@ -133,6 +181,10 @@ final class PropertyPlaces {
             InputLocation location = raw == null ? null : raw.getLocation(field);
             if (location != null) {
                 return new Found(places.of(location), textOf(raw, field));
+            }
+            // A name is not inherited, so a parent's is no answer for the pom built.
+            if (field.equals("name")) {
+                return null;
             }
         }
         return null;

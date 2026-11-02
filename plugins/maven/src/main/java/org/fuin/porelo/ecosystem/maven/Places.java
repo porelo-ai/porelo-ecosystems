@@ -81,6 +81,11 @@ final class Places {
                 .replace(home.toString(), "<home>");
     }
 
+    /** Whether a pom may be walked as part of the checkout, which a parent's place need not. */
+    boolean isInTheCheckout(Path file) {
+        return mayRead(file) && realOrNormal(file).startsWith(checkout);
+    }
+
     private String relativeToHome(Path real) {
         return real.startsWith(home) ? home.relativize(real).toString() : real.toString();
     }

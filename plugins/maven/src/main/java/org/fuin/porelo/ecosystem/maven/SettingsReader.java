@@ -173,6 +173,7 @@ final class SettingsReader {
         RepositoryDraft draft = java.util.Objects.requireNonNull(repository);
         switch (name) {
             case "id" -> draft.id = text(reader);
+            case "layout" -> draft.layout = text(reader);
             case "url" -> {
                 draft.url = text(reader);
                 draft.urlLocation = new InputLocation(line, column, source);
@@ -278,6 +279,7 @@ final class SettingsReader {
         @Nullable String id;
         @Nullable String url;
         @Nullable InputLocation urlLocation;
+        @Nullable String layout;
         boolean plugin;
     }
 
@@ -302,6 +304,9 @@ final class SettingsReader {
                 repository.setId(draft.id == null ? "default" : draft.id);
                 repository.setUrl(draft.url);
                 repository.setLocation("url", draft.urlLocation);
+                if (draft.layout != null) {
+                    repository.setLayout(draft.layout);
+                }
                 if (draft.plugin) {
                     result.addPluginRepository(repository);
                 } else {

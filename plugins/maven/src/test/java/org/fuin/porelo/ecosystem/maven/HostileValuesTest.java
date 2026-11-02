@@ -5,11 +5,13 @@ import static org.fuin.porelo.ecosystem.maven.Fixture.parent;
 import static org.fuin.porelo.ecosystem.maven.Fixture.project;
 import static org.fuin.porelo.ecosystem.maven.Fixture.properties;
 import static org.fuin.porelo.ecosystem.maven.Fixture.repository;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -211,8 +213,8 @@ class HostileValuesTest {
                     .as("a value whose writer cannot be named is no host of anyone's")
                     .noneMatch(h -> h.url().contains("evil"));
             assertThat(answer.unknowns())
-                    .as("named, not dropped")
-                    .anyMatch(u -> u.why().contains("corp-repo"));
+                    .as("the expression named, not dropped")
+                    .anyMatch(u -> u.what().startsWith("${") && u.why().contains("corp-repo"));
         }
 
         @Test
@@ -233,13 +235,14 @@ class HostileValuesTest {
                             </project>
                             """);
 
-            assertThat(f.answer().hosts())
-                    .as(
-                            "its coordinates stand in the checkout, and the host must not be the person's")
-                    .noneMatch(
-                            h ->
-                                    h.host().equals("evil.example.org")
-                                            && h.origin() != Origin.CHECKOUT);
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(hosts(answer))
+                    .as("its coordinates stand in the parent element, which names no field's place")
+                    .doesNotContain("evil.example.org");
+            assertThat(answer.unknowns())
+                    .as("named, not dropped")
+                    .anyMatch(u -> u.why().contains("corp-repo"));
         }
 
         @Test
@@ -633,6 +636,301 @@ class HostileValuesTest {
                     .as("only the machine's values may stand without a file")
                     .anyMatch(u -> u.place().file().equals("pom.xml"));
         }
+    }
+
+    /** Harm prevented: a trace that does not reproduce the value names the wrong writer. */
+    @Nested
+    class ATraceMustReproduceTheValue {
+        @Test
+        void aPropertyReferringToItselfCannotPassAsThePersons() throws IOException {
+            settingsProfile(
+                            properties("name", "${name}")
+                                    + repository("corp-repo", "https://${name}/maven"))
+                    .pom("pom.xml", project("child", "  <name>evil.example.org</name>\n"));
+
+            assertThat(f.answer().hosts())
+                    .as("Maven passes over such a property, to the checkout's field")
+                    .noneMatch(
+                            h ->
+                                    h.host().equals("evil.example.org")
+                                            && h.origin() != Origin.CHECKOUT);
+        }
+
+        @Test
+        void aChildSharingItsParentsIdCannotPassAsTheMachines() throws IOException {
+            f.localPom(
+                            "org.example",
+                            "parent",
+                            "1",
+                            project(
+                                    "parent",
+                                    properties("repo.host", "trusted.example.org")
+                                            + repository("r", "https://${repo.host}/maven")))
+                    .pom(
+                            "pom.xml",
+                            """
+                            <project>
+                              <modelVersion>4.0.0</modelVersion>
+                              <parent>
+                                <groupId>org.example</groupId>
+                                <artifactId>parent</artifactId>
+                                <version>1</version>
+                                <relativePath/>
+                              </parent>
+                              <artifactId>parent</artifactId>
+                              <properties><repo.host>evil.example.org</repo.host></properties>
+                            %s
+                            </project>
+                            """
+                                    .formatted(
+                                            repository(
+                                                    "leak",
+                                                    "https://leak.example.org${project.basedir}")));
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(answer.hosts())
+                    .as("the builder keeps one raw model under the shared id")
+                    .noneMatch(
+                            h ->
+                                    h.host().equals("evil.example.org")
+                                            && h.origin() != Origin.CHECKOUT);
+            assertThat(answer.toString())
+                    .as("and a repository whose raw form is lost is not answered")
+                    .doesNotContain(f.checkout.toString());
+        }
+
+        @Test
+        void aPropertyInAChildWithoutANameIsTheCheckoutsThoughItsParentHasOne() throws IOException {
+            f.localPom(
+                            "org.example",
+                            "grand",
+                            "1",
+                            project(
+                                    "grand",
+                                    "  <name>Parent</name>\n"
+                                            + repository("r", "https://${project.name}/maven")))
+                    .pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    parent("grand", "")
+                                            + properties("project.name", "evil.example.org")));
+
+            assertThat(host(f.answer(), "evil.example.org").origin())
+                    .as("a name is not inherited, so the checkout's property fills it")
+                    .isEqualTo(Origin.CHECKOUT);
+        }
+
+        @Test
+        void aPropertyUnderTheProjectPrefixIsAnswered() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            properties("project.repo.host", "repo.example.org")
+                                    + repository("r", "https://${project.repo.host}/maven")));
+
+            assertThat(hosts(f.answer()))
+                    .as("the model has no such field, so a harmless property fills it")
+                    .contains("repo.example.org");
+        }
+
+        @Test
+        void aPathBuiltOutOfPiecesNeverReachesAUrl() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            "  <properties><d>$</d><where>${d}{project.basedir}</where></properties>\n"
+                                    + repository("r", "https://a.example.org${where}")));
+
+            assertThat(f.answer().toString())
+                    .as("no part of the checkout's path")
+                    .doesNotContain(f.checkout.toString());
+        }
+
+        @Test
+        void aPathBehindASelfReferringPropertyNeverReachesAUrl() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            "  <name>${project.basedir}</name>\n"
+                                    + properties("name", "${name}")
+                                    + repository("r", "https://a.example.org${name}")));
+
+            assertThat(f.answer().toString())
+                    .as("no part of the checkout's path")
+                    .doesNotContain(f.checkout.toString());
+        }
+
+        @Test
+        void aPathInAPropertyOfAChildWithoutANameNeverReachesAUrl() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            properties("project.name", "${project.basedir}")
+                                    + repository("r", "https://a.example.org${project.name}")));
+
+            assertThat(f.answer().toString())
+                    .as("no part of the checkout's path")
+                    .doesNotContain(f.checkout.toString());
+        }
+    }
+
+    /** Harm prevented: a checkout makes a pom of the machine's speak as one of its modules. */
+    @Nested
+    class AModuleLinkedOutOfTheCheckout {
+        @Test
+        void isNotReadFromTheLocalRepository() throws IOException {
+            f.localPom(
+                    "org.example",
+                    "elsewhere",
+                    "1",
+                    project("elsewhere", repository("o", "https://local.example.org/m")));
+            Path local = f.localRepository().resolve("org/example/elsewhere/1/elsewhere-1.pom");
+            f.pom("pom.xml", project("root", "  <modules><module>sub</module></modules>\n"));
+            Files.createDirectories(f.checkout.resolve("sub"));
+            Files.createSymbolicLink(f.checkout.resolve("sub/pom.xml"), local);
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(hosts(answer)).as("nothing from it").doesNotContain("local.example.org");
+            assertThat(answer.unknowns())
+                    .as("and named")
+                    .anyMatch(u -> u.what().equals("module sub"));
+        }
+    }
+
+    /** Harm prevented: a short pom holds the plugin on a CPU, with no way out for the caller. */
+    @Nested
+    class AnActivationThatDoubles {
+        private static String levels() {
+            StringBuilder levels = new StringBuilder("<p0>xxxxxxxxxxxxxxxx</p0>");
+            for (int i = 1; i <= 28; i++) {
+                levels.append("<p%d>${p%d}${p%d}</p%d>".formatted(i, i - 1, i - 1, i));
+            }
+            return levels.toString();
+        }
+
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "<jdk>${p28}</jdk>",
+                    "<property><name>${p28}</name></property>",
+                    "<os><name>${p28}</name></os>",
+                    "<file><exists>${p28}</exists></file>",
+                })
+        void endsAndIsNamed(String activation) throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "bomb",
+                            "  <properties>"
+                                    + levels()
+                                    + "</properties>\n  <profiles><profile><id>p</id><activation>"
+                                    + activation
+                                    + "</activation>"
+                                    + repository("r", "https://r.example.org/m")
+                                    + "</profile></profiles>\n"));
+
+            RepositoryHostsAnswer answer =
+                    assertTimeoutPreemptively(Duration.ofSeconds(20), () -> f.answer());
+
+            assertThat(answer.unknowns())
+                    .as("refused by the bound, and not after running out of memory first")
+                    .anyMatch(u -> u.why().contains("would grow"));
+        }
+    }
+
+    /** Harm prevented: the person's own settings are read differently from how Maven reads them. */
+    @Nested
+    class SettingsAsMavenReadsThem {
+        @ParameterizedTest
+        @ValueSource(strings = {"<localRepository/>", "<localRepository>  </localRepository>"})
+        void anEmptyLocalRepositoryIsTheDefault(String element) throws IOException {
+            f.settings("<settings>" + element + "</settings>")
+                    .localPom(
+                            "org.example",
+                            "grand",
+                            "1",
+                            project("grand", repository("r", "https://local.example.org/m")))
+                    .pom("pom.xml", project("child", parent("grand", "")));
+
+            assertThat(hosts(f.answer()))
+                    .as("the parent is found where Maven looks, not where the process runs")
+                    .contains("local.example.org");
+        }
+
+        @Test
+        void aRepositoryCoveredByAMirrorIsReplacedThoughItsUrlCannotBeRead() throws IOException {
+            f.settings(
+                            """
+                            <settings><mirrors><mirror>
+                              <id>corp</id><mirrorOf>snapshots</mirrorOf>
+                              <url>https://mirror.example.org/s</url>
+                            </mirror></mirrors></settings>
+                            """)
+                    .pom(
+                            "pom.xml",
+                            project("child", repository("snapshots", "${env.SNAPSHOT_URL}")));
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(hosts(answer))
+                    .as("a mirror is selected by the id alone")
+                    .contains("mirror.example.org");
+            assertThat(answer.unknowns())
+                    .as("so nothing is missing for the URL it replaces")
+                    .noneMatch(u -> u.what().contains("SNAPSHOT_URL"));
+        }
+
+        @Test
+        void aSettingsRepositorysLayoutDecidesItsMirror() throws IOException {
+            f.settings(
+                            """
+                            <settings>
+                              <mirrors><mirror>
+                                <id>m</id><mirrorOf>*</mirrorOf>
+                                <mirrorOfLayouts>default</mirrorOfLayouts>
+                                <url>https://mirror.example.org/</url>
+                              </mirror></mirrors>
+                              <profiles><profile>
+                                <id>corp</id>
+                                <repositories><repository>
+                                  <id>p2-repo</id><layout>p2</layout>
+                                  <url>https://p2.example.org/repo</url>
+                                </repository></repositories>
+                              </profile></profiles>
+                              <activeProfiles><activeProfile>corp</activeProfile></activeProfiles>
+                            </settings>
+                            """)
+                    .pom("pom.xml", project("child", ""));
+
+            assertThat(hosts(f.answer()))
+                    .as("another layout goes straight to its host")
+                    .contains("p2.example.org");
+        }
+    }
+
+    /** Harm prevented: a common pom is refused, or the walk looks above the checkout. */
+    @Test
+    void theRootDirectoryOutsideARepositoryRefusesNothing() throws IOException {
+        f.pom(
+                "pom.xml",
+                project(
+                        "child",
+                        "  <description>${project.rootDirectory}</description>\n"
+                                + repository("r", "https://r.example.org/m")));
+
+        RepositoryHostsAnswer answer = f.answer();
+
+        assertThat(hosts(answer)).as("the pom is answered").contains("r.example.org");
+        assertThat(answer.unknowns())
+                .as("nothing refused")
+                .noneMatch(u -> u.why().contains("refused"));
     }
 
     /** Harm prevented: a repository the person's mirror covers is answered as reached directly. */

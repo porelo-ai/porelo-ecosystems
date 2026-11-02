@@ -32,7 +32,7 @@ import org.apache.maven.model.building.ModelProblem;
 import org.apache.maven.model.building.ModelProcessor;
 import org.apache.maven.model.interpolation.ModelInterpolator;
 import org.apache.maven.model.profile.activation.ProfileActivator;
-import org.apache.maven.model.root.DefaultRootLocator;
+import org.apache.maven.model.root.RootLocator;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -136,7 +136,7 @@ public final class RepositoryHosts {
     }
 
     private List<Path> readPom(Path pom) {
-        if (!places.mayRead(pom)) {
+        if (!places.isInTheCheckout(pom)) {
             unknowns.add(
                     new UnknownValue(
                             SafeText.of(pom.getFileName().toString()),
@@ -256,21 +256,16 @@ public final class RepositoryHosts {
         InputLocation at = repository.getLocation("url");
         Place place = places.of(at != null ? at : repository.getLocation(""));
         Repository raw = rawOf(repository, result);
-        PropertyPlaces.Trace trace = properties.of(written(raw));
-        // Only the id as written may be shown while what fills it in is not followed.
-        String id = SafeText.of(idToShow(repository, raw, trace));
         String url = repository.getUrl() == null ? "" : repository.getUrl();
         if (repository.getId() == null && raw != null && raw.getId() != null) {
             unknowns.add(
                     new UnknownValue(
-                            "repository " + id,
+                            "repository " + SafeText.of(raw.getId()),
                             "its id could not be filled in, so no mirror can be selected for it",
                             place));
             return;
         }
-        if (holdsExpression(url, place, id) || holdsUntraced(trace, place, id)) {
-            return;
-        }
+        // Maven selects a mirror before it looks at the URL it replaces.
         Optional<UserSettings.Mirror> mirror =
                 mirrors.of(
                         repository.getId() == null ? "default" : repository.getId(),
@@ -278,6 +273,26 @@ public final class RepositoryHosts {
                         repository.getLayout());
         if (mirror.isPresent()) {
             answerMirror(mirror.get());
+            return;
+        }
+        PropertyPlaces.Trace trace = properties.of(written(raw));
+        boolean followed =
+                raw != null
+                        && trace.untraced().isEmpty()
+                        && properties.reproduces(raw.getUrl(), repository.getUrl())
+                        && properties.reproduces(raw.getId(), repository.getId());
+        // While what fills it in is not followed, only the id as written may be shown.
+        String id = SafeText.of(idToShow(repository, raw, followed));
+        if (holdsExpression(url, place, id) || holdsUntraced(trace, place, id)) {
+            return;
+        }
+        if (!followed) {
+            unknowns.add(
+                    new UnknownValue(
+                            "repository " + id,
+                            "what filled it in cannot be followed to whoever wrote it, so no host"
+                                    + " is answered",
+                            place));
             return;
         }
         hostUrl(url, id, place)
@@ -299,12 +314,11 @@ public final class RepositoryHosts {
     }
 
     private static String idToShow(
-            Repository repository, @Nullable Repository raw, PropertyPlaces.Trace trace) {
-        String id = repository.getId();
-        if (raw != null && raw.getId() != null && (id == null || !trace.untraced().isEmpty())) {
-            return raw.getId();
+            Repository repository, @Nullable Repository raw, boolean followed) {
+        if (followed && repository.getId() != null) {
+            return repository.getId();
         }
-        return id == null ? "default" : id;
+        return raw == null || raw.getId() == null ? "default" : raw.getId();
     }
 
     private boolean holdsUntraced(PropertyPlaces.Trace trace, Place place, String id) {
@@ -488,7 +502,7 @@ public final class RepositoryHosts {
             String module = model.getModules().get(i);
             Path target = directory.resolve(module.replace('\\', File.separatorChar)).normalize();
             Path modulePom = Files.isDirectory(target) ? target.resolve("pom.xml") : target;
-            if (places.mayRead(modulePom)) {
+            if (places.isInTheCheckout(modulePom)) {
                 modules.add(modulePom);
             } else {
                 unknowns.add(
@@ -508,10 +522,14 @@ public final class RepositoryHosts {
 
     // Maven's own default, and the parts its split local repository uses.
     private static List<Path> localRoots(@Nullable String written, Path home) throws IOException {
+        Path chosen =
+                written == null ? null : Path.of(written.replace("${user.home}", home.toString()));
+        // Empty is Maven's default too; a relative path would widen what is read to wherever this
+        // process happens to run.
         Path base =
-                written == null
+                chosen == null || !chosen.isAbsolute()
                         ? home.resolve(".m2").resolve("repository")
-                        : Path.of(written.replace("${user.home}", home.toString()));
+                        : chosen;
         List<Path> roots =
                 new ArrayList<>(List.of(base, base.resolve("cached"), base.resolve("installed")));
         Path installed = base.resolve("installed");
@@ -521,6 +539,21 @@ public final class RepositoryHosts {
             }
         }
         return roots;
+    }
+
+    /**
+     * The checkout itself: Maven's own looks for a directory above it, and fails on finding none.
+     */
+    private record CheckoutRoot(Path checkout) implements RootLocator {
+        @Override
+        public Path findRoot(Path basedir) {
+            return checkout;
+        }
+
+        @Override
+        public Path findMandatoryRoot(Path basedir) {
+            return checkout;
+        }
     }
 
     /** The builder with its one pom reader guarded and no activator that asks the machine. */
@@ -549,7 +582,7 @@ public final class RepositoryHosts {
                     .setPathTranslator(newPathTranslator())
                     .setUrlNormalizer(newUrlNormalizer())
                     .setVersionPropertiesProcessor(newModelVersionPropertiesProcessor())
-                    .setRootLocator(new DefaultRootLocator());
+                    .setRootLocator(new CheckoutRoot(places.checkout()));
         }
 
         @Override
