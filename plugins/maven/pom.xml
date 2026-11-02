@@ -9,7 +9,50 @@
         <version>0.1.0-SNAPSHOT</version>
     </parent>
     <artifactId>porelo-ecosystem-maven</artifactId>
-    <packaging>pom</packaging>
     <name>Porelo Ecosystem Maven</name>
     <description>Recognizes what a Maven checkout needs</description>
+    <properties>
+        <maven-model-builder.version>3.10.0</maven-model-builder.version>
+    </properties>
+    <dependencies>
+        <dependency>
+            <groupId>org.apache.maven</groupId>
+            <artifactId>maven-model-builder</artifactId>
+            <version>${maven-model-builder.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jspecify</groupId>
+            <artifactId>jspecify</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <!-- Real Maven answers the comparison test, from the wrapper this build pins. -->
+                        <test.maven.wrapper>${maven.multiModuleProjectDirectory}/mvnw</test.maven.wrapper>
+                        <test.maven.repository>${settings.localRepository}</test.maven.repository>
+                        <test.maven.help.version>${maven-help-plugin.version}</test.maven.help.version>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

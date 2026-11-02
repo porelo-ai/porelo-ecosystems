@@ -70,7 +70,3 @@ The local-only resolver is about 25 lines. It must also find the local repositor
 
 - The numbers above are written here, each from a run, with the versions used.
 - The answer names what [EC02](README.md#ec02) and [EC03](README.md#ec03) build on.
-
-## To be checked
-
-- Whether a parent found only in a split repository's parts is read: the two Porelo repositories also have unsplit copies here, so MIMA's answer on them does not show it.

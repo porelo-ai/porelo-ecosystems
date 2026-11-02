@@ -1,0 +1,2 @@
+title: Recognize which repository hosts a Maven checkout needs, from its poms and the person's settings, with each host's file, line and origin, offline and without running any of the project's code.
+type: added
