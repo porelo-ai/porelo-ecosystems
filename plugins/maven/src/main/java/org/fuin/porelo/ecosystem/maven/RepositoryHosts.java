@@ -7,19 +7,15 @@ import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
-import org.apache.maven.model.Activation;
 import org.apache.maven.model.BuildBase;
 import org.apache.maven.model.Extension;
 import org.apache.maven.model.InputLocation;
@@ -39,7 +35,10 @@ import org.apache.maven.model.building.ModelBuildingResult;
 import org.apache.maven.model.building.ModelProblem;
 import org.apache.maven.model.building.ModelProcessor;
 import org.apache.maven.model.interpolation.ModelInterpolator;
+import org.apache.maven.model.interpolation.StringVisitorModelInterpolator;
+import org.apache.maven.model.profile.activation.FileProfileActivator;
 import org.apache.maven.model.profile.activation.ProfileActivator;
+import org.apache.maven.model.profile.activation.PropertyProfileActivator;
 import org.apache.maven.model.root.RootLocator;
 import org.jspecify.annotations.Nullable;
 
@@ -49,11 +48,10 @@ import org.jspecify.annotations.Nullable;
 public final class RepositoryHosts {
     private static final String ENV_PREFIX = "env.";
     private static final String EXTENSIONS = ".mvn/extensions.xml";
-    private static final String MAVEN_CONFIG = ".mvn/maven.config";
-    private static final String JVM_CONFIG = ".mvn/jvm.config";
+    private static final Pattern EXPRESSION = Pattern.compile("\\$\\{([^}]+)}");
     private static final String EXTENSION_LOADED =
             "this loads a Maven extension, whose code can change the model; it is not loaded, so"
-                    + " the model is not trusted";
+                    + " what it changes is not in this answer";
 
     private final Places places;
     private final UserSettings settings;
@@ -66,17 +64,25 @@ public final class RepositoryHosts {
     private final Set<Unplaced> unplaced = new LinkedHashSet<>();
     private final PomGuard guard;
     private final DefaultModelBuilder builder;
-    private boolean trusted = true;
+    private final MavenOptions options;
+    private final MachineCondition machineCondition;
 
     private RepositoryHosts(
-            Path checkout, Path home, Path settingsFile, UserSettings settings, List<Path> roots) {
-        this.places = new Places(checkout, home, settingsFile, roots);
+            Path checkout,
+            Path home,
+            Path settingsFile,
+            UserSettings settings,
+            List<Path> roots,
+            MavenOptions options) {
+        this.places = new Places(checkout, home, settingsFile);
         this.settings = settings;
         this.settingsFile = settingsFile;
         this.settingsPlace = places.of(settingsFile, 0);
         this.mirrors = new Mirrors(settings.mirrors());
         this.localRoots = roots;
-        var factory = new GuardedFactory(places);
+        this.options = options;
+        this.machineCondition = new MachineCondition(places.checkout());
+        var factory = new GuardedFactory(places, machineCondition);
         this.builder = factory.newInstance();
         this.guard = factory.guard();
     }
@@ -92,10 +98,22 @@ public final class RepositoryHosts {
      */
     public static RepositoryHostsAnswer read(Path checkout, Path home) throws IOException {
         Path absoluteHome = home.toAbsolutePath();
-        Path settingsFile = absoluteHome.resolve(".m2").resolve("settings.xml");
-        UserSettings settings = SettingsReader.read(settingsFile);
-        List<Path> roots = localRoots(settings.localRepository(), absoluteHome);
-        return new RepositoryHosts(checkout, absoluteHome, settingsFile, settings, roots).answer();
+        Path absoluteCheckout = checkout.toAbsolutePath();
+        MavenOptions options = MavenOptions.read(absoluteCheckout);
+        String named = options.settings();
+        Path settingsFile =
+                named == null
+                        ? absoluteHome.resolve(".m2").resolve("settings.xml")
+                        : absoluteCheckout.resolve(named);
+        UserSettings settings = SettingsReader.read(settingsFile, options);
+        String localRepository = options.property("maven.repo.local");
+        List<Path> roots =
+                localRoots(
+                        localRepository != null ? localRepository : settings.localRepository(),
+                        absoluteHome);
+        return new RepositoryHosts(
+                        absoluteCheckout, absoluteHome, settingsFile, settings, roots, options)
+                .answer();
     }
 
     private RepositoryHostsAnswer answer() {
@@ -104,7 +122,22 @@ public final class RepositoryHosts {
         if (!Files.isRegularFile(rootPom)) {
             throw new NotAMavenCheckoutException(checkout.toString());
         }
-        namedFiles(checkout);
+        unplaced.addAll(options.notes());
+        if (options.settings() != null && !Files.isRegularFile(settingsFile)) {
+            unknowns.add(
+                    new UnknownValue(
+                            options.settings(),
+                            "these settings are named for the build and are not there, and Maven"
+                                    + " stops on that",
+                            options.settingsPlace()));
+        }
+        if (Files.exists(checkout.resolve(EXTENSIONS))) {
+            unplaced.add(
+                    new Unplaced(
+                            "this file loads Maven extensions, which can change the model; they are"
+                                    + " not loaded, so what they change is not in this answer",
+                            new Place(EXTENSIONS, 0, Origin.CHECKOUT)));
+        }
         settings.unread()
                 .forEach(
                         unreadValue ->
@@ -121,7 +154,7 @@ public final class RepositoryHosts {
                         condition ->
                                 unknowns.add(
                                         new UnknownValue(
-                                                "profile " + SafeText.of(condition.profile()),
+                                                "profile " + condition.profile(),
                                                 "active only under a condition on "
                                                         + condition.condition()
                                                         + ", which depends on where the build runs",
@@ -139,39 +172,13 @@ public final class RepositoryHosts {
             }
         }
         return new RepositoryHostsAnswer(
-                List.copyOf(hosts), List.copyOf(unknowns), List.copyOf(unplaced), trusted);
-    }
-
-    private void namedFiles(Path checkout) {
-        optionsFile(checkout, MAVEN_CONFIG, OptionFiles.MAVEN_OPTIONS);
-        optionsFile(checkout, JVM_CONFIG, OptionFiles.JVM_OPTIONS);
-        if (Files.exists(checkout.resolve(EXTENSIONS))) {
-            distrust(
-                    "this file loads Maven extensions, which can change the model; they are"
-                            + " not loaded, so the model is not trusted",
-                    new Place(EXTENSIONS, 0, Origin.CHECKOUT));
-        }
-    }
-
-    private void optionsFile(Path checkout, String name, Pattern harmless) {
-        Path file = checkout.resolve(name);
-        if (Files.exists(file) && !OptionFiles.leaveTheModelAlone(file, harmless, places)) {
-            distrust(
-                    "this file holds options that can change the model or run code; they are not"
-                            + " applied, so the model is not trusted",
-                    new Place(name, 0, Origin.CHECKOUT));
-        }
-    }
-
-    private void distrust(String why, Place place) {
-        trusted = false;
-        unplaced.add(new Unplaced(why, place));
+                List.copyOf(hosts), List.copyOf(unknowns), List.copyOf(unplaced));
     }
 
     // In the effective model, so a plugin managed elsewhere counts only once a build uses it.
     private void answerExtensions(Model model, ModelBuildingResult result) {
         if (model.getBuild() != null) {
-            model.getBuild().getExtensions().forEach(this::distrustExtension);
+            model.getBuild().getExtensions().forEach(this::nameExtension);
             PluginManagement managed = model.getBuild().getPluginManagement();
             model.getBuild().getPlugins().forEach(plugin -> answerPlugin(plugin, managed));
         }
@@ -179,15 +186,15 @@ public final class RepositoryHosts {
                 .map(result::getRawModel)
                 .filter(Objects::nonNull)
                 .flatMap(raw -> raw.getProfiles().stream())
-                .filter(profile -> conditionOf(profile.getActivation()) != null)
+                .filter(profile -> machineCondition.of(profile.getActivation()) != null)
                 .map(Profile::getBuild)
                 .filter(Objects::nonNull)
                 .map(BuildBase::getPlugins)
                 .forEach(plugins -> plugins.forEach(plugin -> answerPlugin(plugin, null)));
     }
 
-    private void distrustExtension(Extension extension) {
-        distrust(EXTENSION_LOADED, places.of(extension.getLocation("")));
+    private void nameExtension(Extension extension) {
+        unplaced.add(new Unplaced(EXTENSION_LOADED, places.of(extension.getLocation(""))));
     }
 
     private void answerPlugin(Plugin plugin, @Nullable PluginManagement managed) {
@@ -202,34 +209,33 @@ public final class RepositoryHosts {
         String extensions = stated.getExtensions();
         if (extensions != null && !extensions.equals("false")) {
             InputLocation at = stated.getLocation("extensions");
-            distrust(EXTENSION_LOADED, places.of(at != null ? at : stated.getLocation("")));
+            unplaced.add(
+                    new Unplaced(
+                            EXTENSION_LOADED, places.of(at != null ? at : stated.getLocation(""))));
         }
     }
 
     private List<Path> readPom(Path pom) {
-        if (!places.isInTheCheckout(pom)) {
+        if (!Files.isRegularFile(pom)) {
             unknowns.add(
                     new UnknownValue(
-                            SafeText.of(pom.getFileName().toString()),
-                            "this pom lies outside the checkout, or is no regular file, and is not read",
-                            places.asNamedInTheCheckout(pom)));
+                            pom.getFileName().toString(),
+                            "this is no regular file, and is not read",
+                            places.of(pom, 0)));
             return List.of();
         }
         try {
             ModelBuildingResult result = builder.build(request(pom));
-            unknowns.addAll(guard.takeOutside());
             takeRefusals();
             answerModel(result, pom);
             return modulesOf(result.getEffectiveModel(), pom);
         } catch (ModelBuildingException e) {
             answerFailure(e, pom);
             return List.of();
-        } catch (BoundedInterpolator.FillingRefused e) {
-            return refused(pom, "its values would grow beyond what is read");
         } catch (OutOfMemoryError | StackOverflowError e) {
             return refused(pom, "filling in its properties grew beyond what can be held");
         } catch (RuntimeException e) {
-            // The builder gives up on a hostile pom in ways of its own, and one pom must not end
+            // The builder gives up on a broken pom in ways of its own, and one pom must not end
             // the answer for the rest. Its message is not repeated: it can name anything.
             return refused(pom, "Maven's model builder stops on it");
         }
@@ -243,25 +249,28 @@ public final class RepositoryHosts {
 
     private ModelBuildingRequest request(Path pom) {
         var request = new DefaultModelBuildingRequest();
-        request.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MINIMAL);
+        // Below this level the builder takes no property given to Maven.
+        request.setValidationLevel(ModelBuildingRequest.VALIDATION_LEVEL_MAVEN_2_0);
         request.setProcessPlugins(false);
         // The first phase ends before imports, which bring no repository and no property.
         request.setTwoPhaseBuilding(true);
         request.setLocationTracking(true);
-        // Nothing of the machine: a pom must not be able to put a secret from it into a URL.
-        request.setSystemProperties(new Properties());
-        request.setUserProperties(new Properties());
+        // Only what the checkout gives the build: the rest of the machine is for where it runs.
+        request.setSystemProperties(options.system());
+        request.setUserProperties(options.user());
         request.setPomFile(pom.toFile());
         request.setModelSource(new FileModelSource(pom.toFile()));
         // The builder fills these in where they stand, and the next pom must see them as written.
         request.setProfiles(settings.activeProfiles().stream().map(Profile::clone).toList());
-        request.setActiveProfileIds(settings.activeProfileIds());
+        List<String> active = new ArrayList<>(settings.activeProfileIds());
+        active.addAll(options.activeProfiles());
+        request.setActiveProfileIds(active);
+        request.setInactiveProfileIds(options.inactiveProfiles());
         request.setModelResolver(new LocalRepositoryResolver(localRoots, places, unknowns::add));
         return request;
     }
 
     private void answerFailure(ModelBuildingException failure, Path pom) {
-        unknowns.addAll(guard.takeOutside());
         List<UnknownValue> refusals = guard.takeRefusals();
         if (!refusals.isEmpty()) {
             unknowns.addAll(refusals);
@@ -273,7 +282,7 @@ public final class RepositoryHosts {
                         new UnknownValue(
                                 places.of(pom, 0).file(),
                                 "Maven's model builder refuses this pom: "
-                                        + SafeText.of(places.withoutThePaths(problem.getMessage())),
+                                        + places.withoutThePaths(problem.getMessage()),
                                 places.of(
                                         problem.getSource(),
                                         Math.max(problem.getLineNumber(), 0))));
@@ -286,22 +295,12 @@ public final class RepositoryHosts {
     }
 
     private void answerModel(ModelBuildingResult result, Path pom) {
-        var properties = new PropertyPlaces(result, places, settings, settingsPlace);
         Model model = result.getEffectiveModel();
         answerProblems(result, pom);
         answerExtensions(model, result);
-        Map<Spot, Repository> raws = rawRepositories(result);
-        model.getRepositories()
-                .forEach(
-                        r -> answerRepository(r, RepositoryHost.Kind.REPOSITORY, raws, properties));
+        model.getRepositories().forEach(r -> answerRepository(r, RepositoryHost.Kind.REPOSITORY));
         model.getPluginRepositories()
-                .forEach(
-                        r ->
-                                answerRepository(
-                                        r,
-                                        RepositoryHost.Kind.PLUGIN_REPOSITORY,
-                                        raws,
-                                        properties));
+                .forEach(r -> answerRepository(r, RepositoryHost.Kind.PLUGIN_REPOSITORY));
         result.getModelIds().forEach(id -> answerConditionalProfiles(result, id));
     }
 
@@ -313,7 +312,7 @@ public final class RepositoryHosts {
                         new UnknownValue(
                                 places.of(pom, 0).file(),
                                 "Maven's model builder found a problem in this pom: "
-                                        + SafeText.of(places.withoutThePaths(problem.getMessage())),
+                                        + places.withoutThePaths(problem.getMessage()),
                                 places.of(
                                         problem.getSource(),
                                         Math.max(problem.getLineNumber(), 0))));
@@ -321,56 +320,31 @@ public final class RepositoryHosts {
         }
     }
 
-    private void answerRepository(
-            Repository repository,
-            RepositoryHost.Kind kind,
-            Map<Spot, Repository> raws,
-            PropertyPlaces properties) {
+    private void answerRepository(Repository repository, RepositoryHost.Kind kind) {
         // Maven asks such a repository for nothing.
         if (isOff(repository.getReleases()) && isOff(repository.getSnapshots())) {
             return;
         }
         InputLocation at = repository.getLocation("url");
         Place place = places.of(at != null ? at : repository.getLocation(""));
-        Repository raw = rawOf(repository, raws);
         String url = repository.getUrl() == null ? "" : repository.getUrl();
-        if (repository.getId() == null && raw != null && raw.getId() != null) {
+        String id = repository.getId();
+        if (id == null) {
             unknowns.add(
                     new UnknownValue(
-                            "repository " + SafeText.of(raw.getId()),
+                            "a repository",
                             "its id could not be filled in, so no mirror can be selected for it",
                             place));
             return;
         }
         // Maven selects a mirror before it looks at the URL it replaces.
-        Optional<UserSettings.Mirror> mirror =
-                mirrors.of(
-                        repository.getId() == null ? "default" : repository.getId(),
-                        url,
-                        repository.getLayout());
+        Optional<UserSettings.Mirror> mirror = mirrors.of(id, url, repository.getLayout());
         if (mirror.isPresent()) {
             answerMirror(mirror.get());
-            answerWhatTheMirrorAsks(mirror.get(), repository, url, place);
+            answerWhatTheMirrorAsks(mirror.get(), id, url, place);
             return;
         }
-        PropertyPlaces.Trace trace = properties.of(written(raw));
-        boolean followed =
-                raw != null
-                        && trace.untraced().isEmpty()
-                        && properties.reproduces(raw.getUrl(), repository.getUrl())
-                        && properties.reproduces(raw.getId(), repository.getId());
-        // While what fills it in is not followed, only the id as written may be shown.
-        String id = SafeText.of(idToShow(repository, raw, followed));
-        if (holdsExpression(url, place, id) || holdsUntraced(trace, place, id)) {
-            return;
-        }
-        if (!followed) {
-            unknowns.add(
-                    new UnknownValue(
-                            "repository " + id,
-                            "what filled it in cannot be followed to whoever wrote it, so no host"
-                                    + " is answered",
-                            place));
+        if (holdsExpression(url, place, id)) {
             return;
         }
         hostUrl(url, id, place)
@@ -383,7 +357,6 @@ public final class RepositoryHosts {
                                                 host.url(),
                                                 kind,
                                                 place,
-                                                trace.uses(),
                                                 server(id, place))));
     }
 
@@ -393,54 +366,26 @@ public final class RepositoryHosts {
 
     // A pattern other than everything can turn the build away, by what could not be filled in.
     private void answerWhatTheMirrorAsks(
-            UserSettings.Mirror mirror, Repository repository, String url, Place place) {
+            UserSettings.Mirror mirror, String id, String url, Place place) {
         if (mirror.mirrorOf().equals("*")) {
             return;
         }
-        String asked = repository.getId() + (mirror.mirrorOf().contains("external:") ? url : "");
-        Matcher matcher = PropertyPlaces.EXPRESSION.matcher(asked);
+        String asked = id + (mirror.mirrorOf().contains("external:") ? url : "");
+        Matcher matcher = EXPRESSION.matcher(asked);
         while (matcher.find()) {
             unknowns.add(
                     new UnknownValue(
-                            "${" + SafeText.of(matcher.group(1)) + "}",
+                            "${" + matcher.group(1) + "}",
                             "whether a repository goes to mirror "
-                                    + SafeText.of(mirror.id())
+                                    + mirror.id()
                                     + " depends on this, which nothing read here fills in",
                             place));
         }
     }
 
-    private static String written(@Nullable Repository raw) {
-        return raw == null ? "" : raw.getId() + " " + raw.getUrl();
-    }
-
-    private static String idToShow(
-            Repository repository, @Nullable Repository raw, boolean followed) {
-        if (followed && repository.getId() != null) {
-            return repository.getId();
-        }
-        return raw == null || raw.getId() == null ? "default" : raw.getId();
-    }
-
-    private boolean holdsUntraced(PropertyPlaces.Trace trace, Place place, String id) {
-        trace.untraced()
-                .forEach(
-                        name ->
-                                unknowns.add(
-                                        new UnknownValue(
-                                                "${" + name + "}",
-                                                "repository "
-                                                        + id
-                                                        + " is filled in from this, which depends"
-                                                        + " on where the build runs or whose writer"
-                                                        + " cannot be named",
-                                                place)));
-        return !trace.untraced().isEmpty();
-    }
-
     private void answerMirror(UserSettings.Mirror mirror) {
         Place place = new Place(settingsPlace.file(), mirror.line(), settingsPlace.origin());
-        String id = SafeText.of(mirror.id());
+        String id = mirror.id();
         if (mirror.blocked()) {
             unknowns.add(
                     new UnknownValue(
@@ -463,16 +408,15 @@ public final class RepositoryHosts {
                                                 host.url(),
                                                 RepositoryHost.Kind.MIRROR,
                                                 place,
-                                                List.of(),
                                                 server(id, place))));
     }
 
     private boolean holdsExpression(String url, Place place, String id) {
-        Matcher matcher = PropertyPlaces.EXPRESSION.matcher(url);
+        Matcher matcher = EXPRESSION.matcher(url);
         boolean found = false;
         while (matcher.find()) {
             found = true;
-            String name = SafeText.of(matcher.group(1));
+            String name = matcher.group(1);
             unknowns.add(
                     new UnknownValue(
                             "${" + name + "}",
@@ -513,60 +457,19 @@ public final class RepositoryHosts {
                         id, true, new Place(settingsPlace.file(), line, settingsPlace.origin()));
     }
 
-    // By its place: an id can be shared and can hold a property, and a model's own id too.
-    private static @Nullable Repository rawOf(Repository repository, Map<Spot, Repository> raws) {
-        String key = repository.getLocation("url") != null ? "url" : "";
-        InputLocation at = repository.getLocation(key);
-        return at == null ? null : raws.get(Spot.of(key, at));
-    }
-
-    // Once per pom: a pom can hold more repositories than asking each of them for each would bear.
-    private Map<Spot, Repository> rawRepositories(ModelBuildingResult result) {
-        Stream<Repository> inSettings =
-                settings.activeProfiles().stream().flatMap(RepositoryHosts::repositoriesOf);
-        Stream<Repository> inPoms =
-                result.getModelIds().stream()
-                        .map(result::getRawModel)
-                        .filter(Objects::nonNull)
-                        .flatMap(RepositoryHosts::allRepositories);
-        Map<Spot, Repository> raws = new HashMap<>();
-        Stream.concat(inSettings, inPoms)
-                .forEach(
-                        raw -> {
-                            for (String key : List.of("url", "")) {
-                                InputLocation at = raw.getLocation(key);
-                                if (at != null && at.getSource() != null) {
-                                    raws.putIfAbsent(Spot.of(key, at), raw);
-                                }
-                            }
-                        });
-        return raws;
-    }
-
-    private static Stream<Repository> repositoriesOf(Profile profile) {
-        return Stream.concat(
-                profile.getRepositories().stream(), profile.getPluginRepositories().stream());
-    }
-
-    private static Stream<Repository> allRepositories(Model raw) {
-        return Stream.concat(
-                Stream.concat(raw.getRepositories().stream(), raw.getPluginRepositories().stream()),
-                raw.getProfiles().stream().flatMap(RepositoryHosts::repositoriesOf));
-    }
-
     private void answerConditionalProfiles(ModelBuildingResult result, String modelId) {
         Model raw = result.getRawModel(modelId);
         if (raw == null) {
             return;
         }
         for (Profile profile : raw.getProfiles()) {
-            String condition = conditionOf(profile.getActivation());
+            String condition = machineCondition.of(profile.getActivation());
             if (condition != null && holdsSomething(profile)) {
                 InputLocation id = profile.getLocation("id");
                 Place place = places.of(id != null ? id : profile.getLocation(""));
                 unknowns.add(
                         new UnknownValue(
-                                "profile " + SafeText.of(profile.getId()),
+                                "profile " + profile.getId(),
                                 "active only under a condition on "
                                         + condition
                                         + ", which depends on where the build runs; what it holds"
@@ -583,28 +486,6 @@ public final class RepositoryHosts {
                 || !profile.getModules().isEmpty();
     }
 
-    private static @Nullable String conditionOf(@Nullable Activation activation) {
-        if (activation == null) {
-            return null;
-        }
-        List<String> conditions = new ArrayList<>();
-        if (activation.getJdk() != null) {
-            conditions.add("JDK " + SafeText.of(activation.getJdk()));
-        }
-        if (activation.getOs() != null) {
-            conditions.add("the operating system");
-        }
-        if (activation.getFile() != null) {
-            conditions.add("a file");
-        }
-        if (activation.getProperty() != null) {
-            conditions.add(
-                    "the property "
-                            + SafeText.of(String.valueOf(activation.getProperty().getName())));
-        }
-        return conditions.isEmpty() ? null : String.join(", ", conditions);
-    }
-
     private List<Path> modulesOf(Model model, Path pom) {
         List<Path> modules = new ArrayList<>();
         Path directory = pom.toAbsolutePath().normalize().resolveSibling("");
@@ -613,13 +494,13 @@ public final class RepositoryHosts {
             String module = model.getModules().get(i);
             Path target = directory.resolve(module.replace('\\', File.separatorChar)).normalize();
             Path modulePom = Files.isDirectory(target) ? target.resolve("pom.xml") : target;
-            if (places.isInTheCheckout(modulePom)) {
+            if (Files.isRegularFile(modulePom)) {
                 modules.add(modulePom);
             } else {
                 unknowns.add(
                         new UnknownValue(
-                                "module " + SafeText.of(places.withoutThePaths(module)),
-                                "it is missing, or lies outside the checkout, and is not read",
+                                "module " + places.withoutThePaths(module),
+                                "it is missing, and is not read",
                                 placeOfModule(lines, i, pom)));
             }
         }
@@ -652,14 +533,6 @@ public final class RepositoryHosts {
         return roots;
     }
 
-    /** Where a value stands, to tell one repository from another. */
-    private record Spot(String key, @Nullable String source, int line, int column) {
-        static Spot of(String key, InputLocation at) {
-            String source = at.getSource() == null ? null : at.getSource().getLocation();
-            return new Spot(key, source, at.getLineNumber(), at.getColumnNumber());
-        }
-    }
-
     /**
      * The checkout itself: Maven's own looks for a directory above it, and fails on finding none.
      */
@@ -675,13 +548,15 @@ public final class RepositoryHosts {
         }
     }
 
-    /** The builder with its one pom reader guarded and no activator that asks the machine. */
+    /** The builder with its one pom reader guarded, and asking the machine for no activation. */
     private static final class GuardedFactory extends DefaultModelBuilderFactory {
         private final Places places;
+        private final MachineCondition machineCondition;
         private @Nullable PomGuard guard;
 
-        GuardedFactory(Places places) {
+        GuardedFactory(Places places, MachineCondition machineCondition) {
             this.places = places;
+            this.machineCondition = machineCondition;
         }
 
         PomGuard guard() {
@@ -700,7 +575,7 @@ public final class RepositoryHosts {
 
         @Override
         protected ModelInterpolator newModelInterpolator() {
-            return new BoundedInterpolator()
+            return new StringVisitorModelInterpolator()
                     .setPathTranslator(newPathTranslator())
                     .setUrlNormalizer(newUrlNormalizer())
                     .setVersionPropertiesProcessor(newModelVersionPropertiesProcessor())
@@ -709,7 +584,14 @@ public final class RepositoryHosts {
 
         @Override
         protected ProfileActivator[] newProfileActivators() {
-            return new ProfileActivator[0];
+            List<ProfileActivator> activators = new ArrayList<>(List.of(machineCondition));
+            for (ProfileActivator activator : super.newProfileActivators()) {
+                if (activator instanceof PropertyProfileActivator
+                        || activator instanceof FileProfileActivator) {
+                    activators.add(activator);
+                }
+            }
+            return activators.toArray(new ProfileActivator[0]);
         }
     }
 }

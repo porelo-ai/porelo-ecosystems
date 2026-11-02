@@ -482,12 +482,14 @@ no build tool. What a plugin answers becomes a tools draft and a rules draft for
 
 - **A plugin never runs the project's code**: no build tool, no wrapper, no build script, no Maven core extension, no
   plugin of the project's. It reads files and the models built from them.
-- **A plugin reaches no network.** What lies outside the checkout is read from the person's local caches only; a value
-  that sits in something not found there is named as unknown, with where it is set, never guessed.
-- **Files a forge can write are parsed hardened**: XML without DTDs, external entities or fetching, with limits on size
-  and expansion.
-- **Every value names its file and line, and whose it is**: the person's own files, or the checkout's, which anybody
-  who can push wrote. A credential is named by its id only, and its value appears nowhere.
+- **A plugin has nothing to secure.** It runs on the machine where the developer starts Porelo, and aims at the right
+  answer: the hosts the real build would reach. What the build reads is input to the answer; no hostile checkout is
+  hardened against, and a finding against a plugin is a wrong answer, never a security finding.
+- **A plugin reaches no network.** What the build would fetch is read from the person's local caches only; a value that
+  sits in something not found there is named as unknown, with where it is set, never guessed.
+- **A broken or huge file gets an answer, not a crash**: limits on size, XML without DTDs or fetching.
+- **Every value names its file and line, and where that stands**: the person's own files, the checkout, or the machine.
+  A credential is named by its id only, and its value appears nowhere.
 - **Porelo's contract comes from Core**, in `porelo`'s `ecosystems/api`. Logic that does not need it, such as what a pom
   and the person's settings say about repository hosts, is built and tested without it.
 - **Under `GPL-3.0-or-later`, and nothing goes to Maven Central.** A plugin is a native executable in a package of its own, found at run time over the contract; nothing builds against an artifact here.

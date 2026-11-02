@@ -39,11 +39,11 @@ class RepositoryHostsTest {
         return answer.hosts().stream().map(RepositoryHost::host).distinct().toList();
     }
 
-    /** Harm prevented: a value's file and origin decide whether the person trusts a host. */
+    /** Harm prevented: the person looks for a value in the wrong file, or the wrong host. */
     @Nested
     class MergedValues {
         @Test
-        void aValueNamesWhereItsRepositoryAndItsPropertyStand() throws IOException {
+        void aValueNamesTheLineOfItsUrl() throws IOException {
             MergeFixtures.propertyOverriddenInTheParentUsedInTheChild(f);
 
             RepositoryHost host = host(f.answer(), "parent.example.org");
@@ -52,96 +52,13 @@ class RepositoryHostsTest {
                     .as("the repository stands in the child")
                     .isEqualTo("pom.xml");
             assertThat(host.place().line()).as("the url's line").isPositive();
-            assertThat(host.properties())
-                    .as("the property that won stands in the parent")
-                    .extracting(u -> u.name() + " " + u.place().file())
-                    .containsExactly("repo.host parent/pom.xml");
-            assertThat(host.properties().get(0).place().line())
-                    .as("the property's line")
-                    .isPositive();
         }
 
         @Test
-        void aRepositoryInALocalParentFilledInFromTheCheckoutIsTheCheckouts() throws IOException {
-            f.localPom(
-                            "org.example",
-                            "grand",
-                            "1",
-                            project("grand", repository("r", "https://${repo.host}/maven")))
-                    .pom(
-                            "pom.xml",
-                            project(
-                                    "child",
-                                    parent("grand", "")
-                                            + properties("repo.host", "evil.example.org")));
-
-            RepositoryHost host = host(f.answer(), "evil.example.org");
-
-            assertThat(host.place().origin())
-                    .as("the repository stands in the parent")
-                    .isEqualTo(Origin.MACHINE);
-            assertThat(host.origin())
-                    .as("but the checkout chose its host")
-                    .isEqualTo(Origin.CHECKOUT);
-        }
-
-        @Test
-        void aSettingsRepositoryFilledInFromTheCheckoutIsTheCheckouts() throws IOException {
-            f.settings(
-                            """
-                            <settings>
-                              <profiles>
-                                <profile>
-                                  <id>corp</id>
-                                  <repositories>
-                                    <repository>
-                                      <id>corp-repo</id>
-                                      <url>https://${repo.host}/maven</url>
-                                    </repository>
-                                  </repositories>
-                                </profile>
-                              </profiles>
-                              <activeProfiles><activeProfile>corp</activeProfile></activeProfiles>
-                            </settings>
-                            """)
-                    .pom("pom.xml", project("child", properties("repo.host", "evil.example.org")));
-
-            RepositoryHost host = host(f.answer(), "evil.example.org");
-
-            assertThat(host.place().origin())
-                    .as("the repository stands in the settings")
-                    .isEqualTo(Origin.YOURS);
-            assertThat(host.place().file())
-                    .as("named relative to the home")
-                    .isEqualTo(".m2/settings.xml");
-            assertThat(host.origin())
-                    .as("a forge must not get a host marked as the person's")
-                    .isEqualTo(Origin.CHECKOUT);
-        }
-
-        @Test
-        void aSettingsPropertyWinsAndIsNamedAsThePersons() throws IOException {
+        void aSettingsPropertyWinsOverThePoms() throws IOException {
             MergeFixtures.propertyFromASettingsProfile(f);
 
             RepositoryHost host = host(f.answer(), "settings.example.org");
-
-            assertThat(host.properties())
-                    .as("the settings' value won over the pom's")
-                    .extracting(u -> u.place().origin())
-                    .containsExactly(Origin.YOURS);
-            assertThat(host.properties().get(0).place().line())
-                    .as("the property's line")
-                    .isPositive();
-        }
-
-        @Test
-        void aNestedPropertyNamesEveryLevelItCameThrough() throws IOException {
-            MergeFixtures.nestedProperties(f);
-
-            assertThat(host(f.answer(), "nested.example.org").properties())
-                    .extracting(PropertyUse::name)
-                    .as("both the property and the one inside it")
-                    .containsExactly("a", "b");
         }
 
         @Test
@@ -201,7 +118,8 @@ class RepositoryHostsTest {
     }
 
     /**
-     * Harm prevented: a pom puts a secret of the machine into a URL, and so into the draft shown.
+     * Harm prevented: a value of the machine stands in for what the build in its box reads, in the
+     * draft shown.
      */
     @Nested
     class NothingOfTheMachine {
@@ -266,34 +184,6 @@ class RepositoryHostsTest {
                     .as("a path is no host")
                     .containsExactly("repo.maven.apache.org");
             assertThat(answer.toString()).as("nor shown").doesNotContain(root.toString());
-        }
-
-        @Test
-        void aProfileOnAFileOrPropertyIsUnknownAndItsPropertiesAreNotApplied() throws IOException {
-            f.pom(
-                    "pom.xml",
-                    project(
-                            "child",
-                            """
-                              <profiles>
-                                <profile>
-                                  <id>on-absent</id>
-                                  <activation><property><name>!never.set</name></property></activation>
-                                  <properties><repo.host>conditional.example.org</repo.host></properties>
-                                </profile>
-                              </profiles>
-                            """
-                                    + repository("r", "https://${repo.host}/m")));
-
-            RepositoryHostsAnswer answer = f.answer();
-
-            assertThat(hosts(answer))
-                    .as("no host from the profile")
-                    .doesNotContain("conditional.example.org");
-            assertThat(answer.unknowns())
-                    .extracting(UnknownValue::what)
-                    .as("both named")
-                    .contains("profile on-absent", "${repo.host}");
         }
     }
 
@@ -447,9 +337,9 @@ class RepositoryHostsTest {
         }
     }
 
-    /** Harm prevented: a pom a forge wrote reads another file or exhausts the machine. */
+    /** Harm prevented: a broken or huge pom takes the answer down. */
     @Nested
-    class HostilePoms {
+    class BrokenPoms {
         @Test
         void anExternalEntityYieldsAnAnswerWithoutTheFilesContent() throws IOException {
             Path secret = Files.writeString(root.resolve("secret.txt"), "local-file-content");
@@ -510,7 +400,7 @@ class RepositoryHostsTest {
 
         @Test
         @Timeout(120)
-        void propertiesThatDoubleAtEachLevelAreRefusedAcrossPoms() throws IOException {
+        void propertiesThatDoubleAtEachLevelAreNamed() throws IOException {
             StringBuilder below = new StringBuilder();
             StringBuilder above = new StringBuilder("<p0>xxxxxxxxxxxxxxxx</p0>");
             for (int i = 1; i <= 40; i++) {
@@ -536,8 +426,8 @@ class RepositoryHostsTest {
 
             assertThat(hosts(answer)).as("no host from it").containsExactly();
             assertThat(answer.unknowns())
-                    .as("refused by name before anything is filled in")
-                    .anyMatch(u -> u.why().contains("would grow"));
+                    .as("an answer, not a crash")
+                    .anyMatch(u -> u.why().startsWith("refused"));
         }
 
         @Test
@@ -583,64 +473,6 @@ class RepositoryHostsTest {
 
             assertThat(f.answer().toString()).as("named, not resolved").contains("g:p:[1,2)");
         }
-
-        @Test
-        void aRelativePathOutsideTheCheckoutIsNotRead() throws IOException {
-            Files.writeString(
-                    root.resolve("outside.xml"),
-                    project("outside", repository("o", "https://outside.example.org/")));
-            f.pom("pom.xml", project("child", parent("outside", "../outside.xml")));
-
-            RepositoryHostsAnswer answer = f.answer();
-
-            assertThat(hosts(answer))
-                    .as("nothing read from outside")
-                    .doesNotContain("outside.example.org");
-            assertThat(answer.unknowns())
-                    .as("the parent is named unknown")
-                    .anyMatch(u -> u.what().contains("org.example:outside:1"));
-        }
-
-        @Test
-        void aLinkInTheCheckoutCannotReachOutside() throws IOException {
-            Path outside =
-                    Files.writeString(
-                            root.resolve("outside.xml"),
-                            project("outside", repository("o", "https://outside.example.org/")));
-            f.pom("pom.xml", project("child", parent("outside", "link.xml")));
-            Files.createSymbolicLink(f.checkout.resolve("link.xml"), outside);
-
-            assertThat(hosts(f.answer()))
-                    .as("the link's target is not read")
-                    .doesNotContain("outside.example.org");
-        }
-
-        @Test
-        void aModuleOutsideTheCheckoutIsNamedAndNotRead() throws IOException {
-            Files.createDirectories(root.resolve("out"));
-            Files.writeString(
-                    root.resolve("out/pom.xml"),
-                    project("out", repository("o", "https://outside.example.org/")));
-            f.pom("pom.xml", project("root", "  <modules><module>../out</module></modules>"));
-
-            RepositoryHostsAnswer answer = f.answer();
-
-            assertThat(hosts(answer)).as("not read").doesNotContain("outside.example.org");
-            assertThat(answer.unknowns())
-                    .as("named")
-                    .anyMatch(u -> u.what().equals("module ../out"));
-        }
-
-        @Test
-        void aControlCharacterInAnIdNeverReachesTheAnswer() throws IOException {
-            f.pom(
-                    "pom.xml",
-                    project("child", repository("evil&#x9B;2J&#x202E;", "https://a.example.org/")));
-
-            assertThat(host(f.answer(), "a.example.org").id())
-                    .as("no terminal escape, and no reordering of what is shown")
-                    .isEqualTo("evil?2J?");
-        }
     }
 
     /**
@@ -649,23 +481,22 @@ class RepositoryHostsTest {
     @Nested
     class WhatIsNotThere {
         @Test
-        void aCheckoutWithExtensionsIsNamedAndNotTrusted() throws IOException {
+        void aCheckoutWithExtensionsIsNamed() throws IOException {
             f.pom("pom.xml", project("child", ""));
             f.pom(".mvn/extensions.xml", "<extensions/>");
 
             RepositoryHostsAnswer answer = f.answer();
 
-            assertThat(answer.modelTrusted()).as("its model could be changed").isFalse();
             assertThat(answer.unplaced())
                     .as("the file is named")
                     .anyMatch(u -> u.place().file().equals(".mvn/extensions.xml"));
         }
 
         @Test
-        void aCheckoutWithoutExtensionsIsTrusted() throws IOException {
+        void aCheckoutWithoutExtensionsHasNothingToName() throws IOException {
             f.pom("pom.xml", project("child", ""));
 
-            assertThat(f.answer().modelTrusted()).as("nothing could change its model").isTrue();
+            assertThat(f.answer().unplaced()).as("nothing could change its model").isEmpty();
         }
 
         @Test

@@ -8,13 +8,9 @@ import java.util.List;
  * @param hosts every host, each once per place
  * @param unknowns what could not be answered
  * @param unplaced what was seen and could not be taken into account
- * @param modelTrusted false when the checkout can change its model in ways not read here
  */
 public record RepositoryHostsAnswer(
-        List<RepositoryHost> hosts,
-        List<UnknownValue> unknowns,
-        List<Unplaced> unplaced,
-        boolean modelTrusted) {
+        List<RepositoryHost> hosts, List<UnknownValue> unknowns, List<Unplaced> unplaced) {
 
     /** Copies the lists. */
     public RepositoryHostsAnswer {

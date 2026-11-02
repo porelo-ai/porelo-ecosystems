@@ -8,12 +8,13 @@ import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.xml.XMLConstants;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
@@ -45,8 +46,10 @@ final class SettingsReader {
     private static final String REPOSITORY = REPOSITORIES + "/repository";
     private static final String PLUGIN_REPOSITORY = PLUGIN_REPOSITORIES + "/pluginRepository";
     private static final String DEFAULT_LAYOUTS = "default,legacy";
+    private static final Pattern EXPRESSION = Pattern.compile("\\$\\{([^}]+)}");
 
     private final Path file;
+    private final MavenOptions options;
     private final InputSource source = new InputSource();
     private final Deque<String> path = new ArrayDeque<>();
     private @Nullable String localRepository;
@@ -59,12 +62,13 @@ final class SettingsReader {
     private @Nullable MirrorDraft mirror;
     private @Nullable RepositoryDraft repository;
 
-    private SettingsReader(Path file) {
+    private SettingsReader(Path file, MavenOptions options) {
         this.file = file;
+        this.options = options;
         source.setLocation(file.toString());
     }
 
-    static UserSettings read(Path file) throws IOException {
+    static UserSettings read(Path file, MavenOptions options) throws IOException {
         byte[] bytes;
         try (InputStream in = Files.newInputStream(file)) {
             bytes = in.readNBytes(MAX_SETTINGS_BYTES + 1);
@@ -74,7 +78,7 @@ final class SettingsReader {
         if (bytes.length > MAX_SETTINGS_BYTES) {
             throw new IOException("larger than " + MAX_SETTINGS_BYTES + " bytes: " + file);
         }
-        return new SettingsReader(file).parse(bytes);
+        return new SettingsReader(file, options).parse(bytes);
     }
 
     private UserSettings parse(byte[] bytes) throws IOException {
@@ -220,7 +224,7 @@ final class SettingsReader {
         if (checked.contains("${")) {
             unread.add(
                     new UserSettings.Unread(
-                            SafeText.of(written),
+                            written,
                             what + " is written with this, which depends on where the build runs",
                             line));
         }
@@ -229,14 +233,12 @@ final class SettingsReader {
     private boolean takeProfile(XMLStreamReader reader, String name, String parent)
             throws XMLStreamException {
         ProfileDraft draft = java.util.Objects.requireNonNull(profile);
-        int line = reader.getLocation().getLineNumber();
         if (parent.equals(PROFILE) && name.equals("id")) {
             draft.id = text(reader);
             return true;
         }
         if (parent.equals(PROFILE + "/properties")) {
             draft.properties.put(name, text(reader));
-            draft.propertyLines.put(name, line);
             return true;
         }
         String activation = PROFILE + "/activation";
@@ -274,7 +276,7 @@ final class SettingsReader {
         if (draft.url == null || draft.mirrorOf == null) {
             unread.add(
                     new UserSettings.Unread(
-                            "mirror " + SafeText.of(id),
+                            "mirror " + id,
                             "it lacks a URL or what it mirrors, and Maven refuses such settings",
                             draft.line));
             return;
@@ -287,12 +289,10 @@ final class SettingsReader {
 
     private UserSettings settings() {
         List<Profile> active = new ArrayList<>();
-        Map<String, Integer> propertyLines = new HashMap<>();
         List<UserSettings.SettingsCondition> conditional = new ArrayList<>();
         for (ProfileDraft draft : profiles) {
             if (activeIds.contains(draft.id) || draft.activeByDefault) {
                 active.add(draft.toProfile());
-                propertyLines.putAll(draft.propertyLines);
             } else if (!draft.conditions.isEmpty()) {
                 conditional.add(
                         new UserSettings.SettingsCondition(
@@ -305,13 +305,20 @@ final class SettingsReader {
                 servers,
                 active,
                 List.copyOf(activeIds),
-                propertyLines,
                 conditional,
                 unread);
     }
 
-    private static String text(XMLStreamReader reader) throws XMLStreamException {
-        return reader.getElementText().strip();
+    // Maven fills in the settings when it reads them, before any pom's property counts.
+    private String text(XMLStreamReader reader) throws XMLStreamException {
+        String written = reader.getElementText().strip();
+        return EXPRESSION
+                .matcher(written)
+                .replaceAll(
+                        match -> {
+                            String value = options.property(match.group(1));
+                            return Matcher.quoteReplacement(value != null ? value : match.group());
+                        });
     }
 
     private static final class MirrorDraft {
@@ -339,7 +346,6 @@ final class SettingsReader {
         boolean activeByDefault;
         final List<String> conditions = new ArrayList<>();
         final Map<String, String> properties = new LinkedHashMap<>();
-        final Map<String, Integer> propertyLines = new LinkedHashMap<>();
         final List<RepositoryDraft> repositories = new ArrayList<>();
 
         Profile toProfile() {

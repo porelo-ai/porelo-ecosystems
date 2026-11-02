@@ -9,8 +9,7 @@ import java.util.Optional;
 record HostUrl(String host, String url) {
     static Optional<HostUrl> parse(String written) {
         try {
-            // Encoded as written: what a decoded path holds can reorder a terminal's text.
-            URI uri = new URI(new URI(written.strip()).toASCIIString());
+            URI uri = new URI(written.strip());
             String host = uri.getHost();
             if (host == null
                     || uri.getScheme() == null

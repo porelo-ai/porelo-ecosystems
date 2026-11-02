@@ -6,6 +6,8 @@ import static org.fuin.porelo.ecosystem.maven.Fixture.properties;
 import static org.fuin.porelo.ecosystem.maven.Fixture.repository;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 /** The merges both this library and real Maven are held to. */
 final class MergeFixtures {
@@ -183,7 +185,7 @@ final class MergeFixtures {
                         "pom.xml",
                         project(
                                 "child",
-                                properties("checkout.host", "evil.example.org")
+                                properties("checkout.host", "other.example.org")
                                         + repository("corp", "https://${repo.host}/maven")));
     }
 
@@ -272,6 +274,135 @@ final class MergeFixtures {
                                     </profile>
                                   </profiles>
                                 """));
+    }
+
+    private static final String REPO_FROM_A_PROPERTY =
+            """
+              <properties><repo.host>pom.example.org</repo.host></properties>
+              <repositories>
+                <repository><id>r</id><url>https://${repo.host}/m</url></repository>
+              </repositories>
+            """;
+
+    static void propertyInMavenConfig(Fixture f) throws IOException {
+        f.pom(".mvn/maven.config", "-Drepo.host=config.example.org\n")
+                .pom("pom.xml", project("child", REPO_FROM_A_PROPERTY));
+    }
+
+    static void twoPropertiesOnOneLineOfMavenConfig(Fixture f) throws IOException {
+        f.pom(".mvn/maven.config", "-Dz=1 -Drepo.host=config.example.org\n")
+                .pom("pom.xml", project("child", REPO_FROM_A_PROPERTY));
+    }
+
+    static void propertyOnTwoLinesOfMavenConfig(Fixture f) throws IOException {
+        f.pom(".mvn/maven.config", "-D\nrepo.host=config.example.org\n")
+                .pom("pom.xml", project("child", REPO_FROM_A_PROPERTY));
+    }
+
+    static void propertyInJvmConfigBesideOneInThePom(Fixture f) throws IOException {
+        f.pom(".mvn/jvm.config", "-Xmx1g -Drepo.host=jvm.example.org\n")
+                .pom("pom.xml", project("child", REPO_FROM_A_PROPERTY));
+    }
+
+    static void propertyInJvmConfigAlone(Fixture f) throws IOException {
+        f.pom(".mvn/jvm.config", "-Drepo.host=jvm.example.org\n")
+                .pom("pom.xml", project("child", repository("r", "https://${repo.host}/m")));
+    }
+
+    private static final String SETTINGS_REPOSITORY_FROM_A_PROPERTY =
+            """
+            <settings><profiles><profile><id>p</id>
+              <activation><activeByDefault>true</activeByDefault></activation>
+              <properties><repo.host>settings.example.org</repo.host></properties>
+              <repositories>
+                <repository><id>s</id><url>https://${repo.host}/m</url></repository>
+              </repositories>
+            </profile></profiles></settings>
+            """;
+
+    static void mavenConfigFillsInTheSettings(Fixture f) throws IOException {
+        f.settings(SETTINGS_REPOSITORY_FROM_A_PROPERTY)
+                .pom(".mvn/maven.config", "-Drepo.host=config.example.org\n")
+                .pom("pom.xml", project("child", ""));
+    }
+
+    static void jvmConfigFillsInTheSettings(Fixture f) throws IOException {
+        f.settings(SETTINGS_REPOSITORY_FROM_A_PROPERTY)
+                .pom(".mvn/jvm.config", "-Drepo.host=jvm.example.org\n")
+                .pom("pom.xml", project("child", ""));
+    }
+
+    private static final String TWO_PROFILES =
+            """
+              <profiles>
+                <profile>
+                  <id>named</id>
+                  <repositories>
+                    <repository><id>n</id><url>https://named.example.org/m</url></repository>
+                  </repositories>
+                </profile>
+                <profile>
+                  <id>usual</id>
+                  <activation><activeByDefault>true</activeByDefault></activation>
+                  <repositories>
+                    <repository><id>u</id><url>https://usual.example.org/m</url></repository>
+                  </repositories>
+                </profile>
+              </profiles>
+            """;
+
+    static void profileInMavenConfig(Fixture f) throws IOException {
+        f.pom(".mvn/maven.config", "-Pnamed\n").pom("pom.xml", project("child", TWO_PROFILES));
+    }
+
+    static void profileTurnedOffInMavenConfig(Fixture f) throws IOException {
+        f.pom(".mvn/maven.config", "-P!usual\n").pom("pom.xml", project("child", TWO_PROFILES));
+    }
+
+    private static final String PROFILES_ON_A_PROPERTY_AND_A_FILE =
+            """
+              <profiles>
+                <profile>
+                  <id>on-property</id>
+                  <activation><property><name>turn.on</name></property></activation>
+                  <repositories>
+                    <repository><id>p</id><url>https://property.example.org/m</url></repository>
+                  </repositories>
+                </profile>
+                <profile>
+                  <id>off-property</id>
+                  <activation><property><name>!turn.on</name></property></activation>
+                  <repositories>
+                    <repository><id>q</id><url>https://not-property.example.org/m</url></repository>
+                  </repositories>
+                </profile>
+                <profile>
+                  <id>on-file</id>
+                  <activation><file><exists>marker.txt</exists></file></activation>
+                  <repositories>
+                    <repository><id>f</id><url>https://file.example.org/m</url></repository>
+                  </repositories>
+                </profile>
+              </profiles>
+            """;
+
+    static void profilesOnNothingGiven(Fixture f) throws IOException {
+        f.pom("pom.xml", project("child", PROFILES_ON_A_PROPERTY_AND_A_FILE));
+    }
+
+    static void profilesOnAPropertyInMavenConfigAndAFile(Fixture f) throws IOException {
+        f.pom(".mvn/maven.config", "-Dturn.on=yes\n")
+                .pom("marker.txt", "")
+                .pom("pom.xml", project("child", PROFILES_ON_A_PROPERTY_AND_A_FILE));
+    }
+
+    static void parentBesideTheCheckout(Fixture f) throws IOException {
+        Path outside = f.checkout.resolveSibling("beside");
+        Files.createDirectories(outside);
+        Files.writeString(
+                outside.resolve("pom.xml"),
+                project("beside", repository("b", "https://beside.example.org/m")));
+        f.pom("pom.xml", project("child", parent("beside", "../beside/pom.xml")));
     }
 
     static void leadingDotInAnExpression(Fixture f) throws IOException {

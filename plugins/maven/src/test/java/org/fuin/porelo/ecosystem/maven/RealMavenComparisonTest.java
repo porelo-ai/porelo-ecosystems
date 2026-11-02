@@ -63,6 +63,40 @@ class RealMavenComparisonTest {
                         "a default settings profile sharing a pom profile's id",
                         (Build) MergeFixtures::defaultSettingsProfileSharingAPomProfilesId),
                 Arguments.of(
+                        "a property in maven.config", (Build) MergeFixtures::propertyInMavenConfig),
+                Arguments.of(
+                        "two properties on one line of maven.config",
+                        (Build) MergeFixtures::twoPropertiesOnOneLineOfMavenConfig),
+                Arguments.of(
+                        "a property on two lines of maven.config",
+                        (Build) MergeFixtures::propertyOnTwoLinesOfMavenConfig),
+                Arguments.of(
+                        "a property in jvm.config beside the pom's",
+                        (Build) MergeFixtures::propertyInJvmConfigBesideOneInThePom),
+                Arguments.of(
+                        "a property in jvm.config alone",
+                        (Build) MergeFixtures::propertyInJvmConfigAlone),
+                Arguments.of(
+                        "maven.config filling in the settings",
+                        (Build) MergeFixtures::mavenConfigFillsInTheSettings),
+                Arguments.of(
+                        "jvm.config filling in the settings",
+                        (Build) MergeFixtures::jvmConfigFillsInTheSettings),
+                Arguments.of(
+                        "a profile in maven.config", (Build) MergeFixtures::profileInMavenConfig),
+                Arguments.of(
+                        "a profile turned off in maven.config",
+                        (Build) MergeFixtures::profileTurnedOffInMavenConfig),
+                Arguments.of(
+                        "profiles on a property and a file, with nothing given",
+                        (Build) MergeFixtures::profilesOnNothingGiven),
+                Arguments.of(
+                        "profiles on a property in maven.config and a file",
+                        (Build) MergeFixtures::profilesOnAPropertyInMavenConfigAndAFile),
+                Arguments.of(
+                        "a parent beside the checkout",
+                        (Build) MergeFixtures::parentBesideTheCheckout),
+                Arguments.of(
                         "pom profiles named in the settings",
                         (Build) MergeFixtures::pomProfileNamedInTheSettings),
                 Arguments.of(

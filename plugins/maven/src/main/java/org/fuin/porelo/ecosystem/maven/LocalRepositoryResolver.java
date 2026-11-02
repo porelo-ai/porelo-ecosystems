@@ -16,7 +16,7 @@ import org.apache.maven.model.resolution.UnresolvableModelException;
 
 /** Finds a parent by the local repository's layout, and nowhere else. */
 final class LocalRepositoryResolver implements ModelResolver {
-    // A forge writes coordinates, and they become a path.
+    // Coordinates become a path, and only a path inside the local repository is the parent's.
     private static final Pattern COORDINATE = Pattern.compile("[A-Za-z0-9_][A-Za-z0-9_.-]*");
 
     private final List<Path> roots;
@@ -69,7 +69,7 @@ final class LocalRepositoryResolver implements ModelResolver {
 
     private ModelSource find(
             String groupId, String artifactId, String version, InputLocation askedAt) {
-        String coordinates = SafeText.of(groupId + ":" + artifactId + ":" + version);
+        String coordinates = groupId + ":" + artifactId + ":" + version;
         if (!isCoordinate(artifactId) || !isCoordinate(version) || !isCoordinate(groupId)) {
             unknowns.accept(
                     new UnknownValue(
@@ -84,7 +84,7 @@ final class LocalRepositoryResolver implements ModelResolver {
                             .resolve(artifactId)
                             .resolve(version)
                             .resolve(artifactId + "-" + version + ".pom");
-            if (Files.isRegularFile(pom) && places.mayRead(pom)) {
+            if (Files.isRegularFile(pom)) {
                 return new FileModelSource(pom.toFile());
             }
         }

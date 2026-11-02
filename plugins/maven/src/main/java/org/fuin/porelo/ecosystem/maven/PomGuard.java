@@ -15,12 +15,7 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
-import org.apache.maven.model.Activation;
-import org.apache.maven.model.ActivationFile;
-import org.apache.maven.model.ActivationOS;
-import org.apache.maven.model.ActivationProperty;
 import org.apache.maven.model.Model;
-import org.apache.maven.model.Profile;
 import org.apache.maven.model.building.ModelProcessor;
 import org.apache.maven.model.building.ModelSource;
 import org.apache.maven.model.io.ModelParseException;
@@ -30,12 +25,10 @@ import org.jspecify.annotations.Nullable;
 final class PomGuard implements ModelProcessor {
     static final int MAX_POM_BYTES = 4 * 1024 * 1024;
     static final int MAX_POM_READS = 20_000;
-    private static final String OUTSIDE_GROUP = "org.fuin.porelo.ecosystem.refused";
 
     private final ModelProcessor delegate;
     private final Places places;
     private final List<UnknownValue> refusals = new ArrayList<>();
-    private final List<UnknownValue> outside = new ArrayList<>();
     private int reads;
 
     PomGuard(ModelProcessor delegate, Places places) {
@@ -47,13 +40,6 @@ final class PomGuard implements ModelProcessor {
     List<UnknownValue> takeRefusals() {
         List<UnknownValue> taken = List.copyOf(refusals);
         refusals.clear();
-        return taken;
-    }
-
-    /** What was passed over since the last call, as outside what is read; empties the list. */
-    List<UnknownValue> takeOutside() {
-        List<UnknownValue> taken = List.copyOf(outside);
-        outside.clear();
         return taken;
     }
 
@@ -71,24 +57,9 @@ final class PomGuard implements ModelProcessor {
                 }
                 throw new IOException("a pom without a source is not read");
             }
-            Path file = fileOf(source);
-            if (file == null || !places.mayRead(file)) {
-                outside.add(
-                        new UnknownValue(
-                                "a parent's relativePath",
-                                "it names a pom outside the checkout, which Maven reads and nothing"
-                                        + " here does; a parent of the same coordinates can stand in"
-                                        + " for it",
-                                file == null
-                                        ? new Place("pom", 0, Origin.CHECKOUT)
-                                        : places.asNamedInTheCheckout(file)));
-                return outsideModel();
-            }
             byte[] bytes = readBounded(in, source);
             refuseDtd(bytes, source);
-            Model model = delegate.read(new ByteArrayInputStream(bytes), options);
-            model.getProfiles().forEach(PomGuard::leaveActivationUnfilled);
-            return model;
+            return delegate.read(new ByteArrayInputStream(bytes), options);
         }
     }
 
@@ -111,49 +82,6 @@ final class PomGuard implements ModelProcessor {
     @Override
     public File locatePom(File projectDirectory) {
         return delegate.locatePom(projectDirectory);
-    }
-
-    // The builder fills an activation in without a bound, before anything else, and nothing here
-    // evaluates one: written so, it stays as text.
-    private static void leaveActivationUnfilled(Profile profile) {
-        Activation activation = profile.getActivation();
-        if (activation == null) {
-            return;
-        }
-        activation.setJdk(unfilled(activation.getJdk()));
-        ActivationOS os = activation.getOs();
-        if (os != null) {
-            os.setArch(unfilled(os.getArch()));
-            os.setFamily(unfilled(os.getFamily()));
-            os.setName(unfilled(os.getName()));
-            os.setVersion(unfilled(os.getVersion()));
-        }
-        ActivationProperty property = activation.getProperty();
-        if (property != null) {
-            property.setName(unfilled(property.getName()));
-            property.setValue(unfilled(property.getValue()));
-        }
-        ActivationFile file = activation.getFile();
-        if (file != null) {
-            file.setExists(unfilled(file.getExists()));
-            file.setMissing(unfilled(file.getMissing()));
-        }
-    }
-
-    private static @Nullable String unfilled(@Nullable String value) {
-        return value == null ? null : value.replace("${", "$ {");
-    }
-
-    // Coordinates no parent can have, so the builder goes on as for a relativePath naming another
-    // pom.
-    private static Model outsideModel() {
-        Model model = new Model();
-        model.setModelVersion("4.0.0");
-        model.setGroupId(OUTSIDE_GROUP);
-        model.setArtifactId("outside");
-        model.setVersion("0");
-        model.setPackaging("pom");
-        return model;
     }
 
     private byte[] readBounded(InputStream in, ModelSource source) throws IOException {
@@ -197,7 +125,7 @@ final class PomGuard implements ModelProcessor {
         Path file = fileOf(source);
         Place place =
                 file == null
-                        ? new Place(SafeText.of(source.getLocation()), 0, Origin.MACHINE)
+                        ? new Place(source.getLocation(), 0, Origin.MACHINE)
                         : places.of(file, 0);
         UnknownValue refusal = new UnknownValue(place.file(), "refused: " + why, place);
         if (!refusals.contains(refusal)) {
