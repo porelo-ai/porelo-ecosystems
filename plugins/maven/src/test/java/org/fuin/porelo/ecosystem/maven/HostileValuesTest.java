@@ -24,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 class HostileValuesTest {
@@ -933,6 +934,416 @@ class HostileValuesTest {
                 .noneMatch(u -> u.why().contains("refused"));
     }
 
+    /** Harm prevented: a checkout's value loses its writer through a name, a link or a file. */
+    @Nested
+    class WhoseAValueIs {
+        @Test
+        void aDirectoryWithAColonInItsNameIsStillTheCheckouts() throws IOException {
+            f.pom("pom.xml", project("root", "  <modules><module>x:</module></modules>\n"))
+                    .pom("x:/pom.xml", project("m", repository("r", "https://evil.example.org/m")));
+
+            RepositoryHost host = host(f.answer(), "evil.example.org");
+
+            assertThat(host.origin())
+                    .as("a path holding a colon and a slash is no built-in source")
+                    .isEqualTo(Origin.CHECKOUT);
+            assertThat(host.place().file()).as("with its file").isEqualTo("x:/pom.xml");
+        }
+
+        @Test
+        void settingsLinkedIntoTheCheckoutAreTheCheckouts() throws IOException {
+            f.pom("pom.xml", project("child", ""));
+            Path written =
+                    Files.writeString(
+                            f.checkout.resolve("forged-settings.xml"),
+                            """
+                            <settings><mirrors><mirror>
+                              <id>m</id><mirrorOf>*</mirrorOf>
+                              <url>https://evil.example.org/</url>
+                            </mirror></mirrors></settings>
+                            """);
+            Files.createDirectories(f.home.resolve(".m2"));
+            Files.createSymbolicLink(f.home.resolve(".m2/settings.xml"), written);
+
+            assertThat(host(f.answer(), "evil.example.org").origin())
+                    .as("whoever can push wrote it")
+                    .isEqualTo(Origin.CHECKOUT);
+        }
+    }
+
+    /** Harm prevented: the answer calls itself trusted while the real build can differ from it. */
+    @Nested
+    class WhatTheCheckoutCanChangeUnread {
+        @ParameterizedTest
+        @CsvSource({
+            ".mvn/maven.config, -Drepo.url=https://evil.example.org/",
+            ".mvn/maven.config, -s forged.xml",
+            ".mvn/maven.config, -Pforged",
+            ".mvn/jvm.config, -Dmaven.repo.central=https://evil.example.org/",
+            ".mvn/jvm.config, -javaagent:forged.jar",
+        })
+        void aFileOfOptionsMakesTheAnswerUntrusted(String file, String options) throws IOException {
+            f.pom("pom.xml", project("child", ""));
+            Files.createDirectories(f.checkout.resolve(".mvn"));
+            Files.writeString(f.checkout.resolve(file), options + "\n");
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(answer.modelTrusted()).as("it can set any property").isFalse();
+            assertThat(answer.unplaced())
+                    .as("and it is named")
+                    .anyMatch(u -> u.place().file().equals(file));
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+            ".mvn/maven.config, -Daether.enhancedLocalRepository.split=true",
+            ".mvn/jvm.config, --add-opens jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
+            ".mvn/jvm.config, -Xmx2g",
+        })
+        void aFileOfOptionsThatCannotTouchTheModelChangesNothing(String file, String options)
+                throws IOException {
+            f.pom("pom.xml", project("child", ""));
+            Files.createDirectories(f.checkout.resolve(".mvn"));
+            Files.writeString(f.checkout.resolve(file), options + "\n");
+
+            assertThat(f.answer().modelTrusted())
+                    .as("every option in it is one that leaves the model alone")
+                    .isTrue();
+        }
+
+        @Test
+        void aManagedExtensionNothingUsesChangesNothing() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            "  <build><pluginManagement><plugins><plugin><groupId>g</groupId>"
+                                    + "<artifactId>e</artifactId><version>1</version>"
+                                    + "<extensions>true</extensions></plugin></plugins>"
+                                    + "</pluginManagement></build>\n"));
+
+            assertThat(f.answer().modelTrusted()).as("no build uses it").isTrue();
+        }
+
+        @Test
+        void aManagedExtensionABuildUsesMakesTheAnswerUntrusted() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            "  <build><pluginManagement><plugins><plugin><groupId>g</groupId>"
+                                    + "<artifactId>e</artifactId><version>1</version>"
+                                    + "<extensions>true</extensions></plugin></plugins>"
+                                    + "</pluginManagement><plugins><plugin><groupId>g</groupId>"
+                                    + "<artifactId>e</artifactId></plugin></plugins></build>\n"));
+
+            assertThat(f.answer().modelTrusted()).as("the build loads it").isFalse();
+        }
+
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "<build><extensions><extension><groupId>g</groupId><artifactId>e</artifactId>"
+                            + "<version>1</version></extension></extensions></build>",
+                    "<build><plugins><plugin><groupId>g</groupId><artifactId>e</artifactId>"
+                            + "<version>1</version><extensions>true</extensions></plugin></plugins>"
+                            + "</build>",
+                })
+        void anExtensionInAPomMakesTheAnswerUntrusted(String build) throws IOException {
+            f.pom("pom.xml", project("child", "  " + build + "\n"));
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(answer.modelTrusted()).as("its code can change the model").isFalse();
+            assertThat(answer.unplaced())
+                    .as("and the pom is named with its line")
+                    .anyMatch(u -> u.place().file().equals("pom.xml") && u.place().line() > 0);
+        }
+
+        @Test
+        void anExtensionInAParentMakesTheAnswerUntrusted() throws IOException {
+            f.pom(
+                            "parent/pom.xml",
+                            project(
+                                    "parent",
+                                    "  <build><extensions><extension><groupId>g</groupId>"
+                                            + "<artifactId>e</artifactId><version>1</version>"
+                                            + "</extension></extensions></build>\n"))
+                    .pom("pom.xml", project("child", parent("parent", "parent/pom.xml")));
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(answer.modelTrusted()).as("every level counts").isFalse();
+            assertThat(answer.unplaced())
+                    .as("and the parent is named")
+                    .anyMatch(u -> u.place().file().equals("parent/pom.xml"));
+        }
+
+        @Test
+        void aPluginWithExtensionsOffChangesNothing() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            "  <build><plugins><plugin><groupId>g</groupId><artifactId>e</artifactId>"
+                                    + "<version>1</version><extensions>false</extensions></plugin>"
+                                    + "</plugins></build>\n"));
+
+            assertThat(f.answer().modelTrusted()).as("no extension is loaded").isTrue();
+        }
+    }
+
+    /** Harm prevented: what is shown reorders itself on a terminal, or shows another URL. */
+    @Nested
+    class WhatIsShown {
+        @Test
+        void aUrlKeepsItsEncodingSoNoInvisibleCharacterAppears() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project("child", repository("r", "https://a.example.org/%E2%80%AE/a%2Fb")));
+
+            assertThat(host(f.answer(), "a.example.org").url())
+                    .as("the URL as written, not as decoded")
+                    .isEqualTo("https://a.example.org/%E2%80%AE/a%2Fb");
+        }
+
+        @Test
+        void anInvisibleCharacterWrittenInAUrlIsEncoded() throws IOException {
+            f.pom("pom.xml", project("child", repository("r", "https://a.example.org/\u202e/x")));
+
+            assertThat(host(f.answer(), "a.example.org").url())
+                    .as("it would reorder what a terminal shows")
+                    .isEqualTo("https://a.example.org/%E2%80%AE/x");
+        }
+
+        @Test
+        void aFileNameCannotCarryALineBreak() throws IOException {
+            f.pom("pom.xml", project("root", "  <modules><module>a&#10;b</module></modules>\n"))
+                    .pom("a\nb/pom.xml", project("m", repository("r", "https://a.example.org/m")));
+
+            assertThat(host(f.answer(), "a.example.org").place().file())
+                    .as("no line of its own making in what is shown")
+                    .isEqualTo("a?b/pom.xml");
+        }
+    }
+
+    /** Harm prevented: a parent other than the one the build reads is merged without a word. */
+    @Test
+    void aParentOutsideTheCheckoutIsNamedThoughTheLocalRepositoryHoldsItsCoordinates()
+            throws IOException {
+        Path outside = f.checkout.resolveSibling("outside");
+        Files.createDirectories(outside);
+        Files.writeString(outside.resolve("pom.xml"), project("beside", ""));
+        f.localPom("org.example", "beside", "1", project("beside", ""))
+                .pom("pom.xml", project("child", parent("beside", "../outside/pom.xml")));
+
+        assertThat(f.answer().unknowns())
+                .as("Maven reads the named pom, and it is not read here")
+                .anyMatch(u -> u.why().contains("outside the checkout"));
+    }
+
+    /** Harm prevented: a refusal names the pom that asked, and not the pom it is about. */
+    @Test
+    void aParentRefusedByTheGuardIsTheOneNamed() throws IOException {
+        String large = "<!-- " + "x".repeat(PomGuard.MAX_POM_BYTES) + " -->";
+        f.localPom("org.example", "large", "1", large + project("large", ""))
+                .pom("pom.xml", project("child", parent("large", "")));
+
+        assertThat(f.answer().unknowns())
+                .as("the guard's own refusal reaches the answer")
+                .anyMatch(u -> u.what().endsWith("large-1.pom") && u.why().startsWith("refused"));
+    }
+
+    /** Harm prevented: a mirror is answered as certain while the build may go around it. */
+    @Nested
+    class AMirrorThatDependsOnWhatIsNotRead {
+        private void mirrorOf(String pattern) throws IOException {
+            f.settings(
+                    """
+                    <settings><mirrors><mirror>
+                      <id>m</id><mirrorOf>%s</mirrorOf><url>https://mirror.example.org/</url>
+                    </mirror></mirrors></settings>
+                    """
+                            .formatted(pattern));
+        }
+
+        @Test
+        void isAnsweredWithAnUnknownWhenItsPatternAsksTheUrl() throws IOException {
+            mirrorOf("external:*");
+            f.pom("pom.xml", project("child", repository("r", "${env.LOCAL}")));
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(hosts(answer)).as("the mirror").contains("mirror.example.org");
+            assertThat(answer.unknowns())
+                    .as("and what could send the build elsewhere")
+                    .anyMatch(u -> u.what().equals("${env.LOCAL}"));
+        }
+
+        @Test
+        void isAnsweredWithAnUnknownWhenItsPatternAsksAnIdNotRead() throws IOException {
+            mirrorOf("*,!internal");
+            f.pom("pom.xml", project("child", repository("${env.REPO}", "https://r.example.org/")));
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(hosts(answer)).as("the mirror").contains("mirror.example.org");
+            assertThat(answer.unknowns())
+                    .as("and what could send the build elsewhere")
+                    .anyMatch(u -> u.what().equals("${env.REPO}"));
+        }
+
+        @Test
+        void isCertainWhenItsPatternAsksNothing() throws IOException {
+            mirrorOf("*");
+            f.pom("pom.xml", project("child", repository("${env.REPO}", "${env.LOCAL}")));
+
+            assertThat(f.answer().unknowns())
+                    .as("every repository goes to the mirror, whatever these hold")
+                    .noneMatch(u -> u.what().contains("env."));
+        }
+    }
+
+    /** Harm prevented: a value Maven fills in from the machine disappears without a word. */
+    @Nested
+    class SettingsThatNeedTheMachine {
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "<mirrors><mirror><id>m</id><mirrorOf>${env.X}</mirrorOf>"
+                            + "<url>https://m.example.org/</url></mirror></mirrors>",
+                    "<activeProfiles><activeProfile>${env.X}</activeProfile></activeProfiles>",
+                    "<localRepository>${env.X}/r</localRepository>",
+                })
+        void isNamed(String element) throws IOException {
+            f.settings("<settings>" + element + "</settings>").pom("pom.xml", project("child", ""));
+
+            assertThat(f.answer().unknowns())
+                    .as("Maven fills it in, and nothing here does")
+                    .anyMatch(
+                            u ->
+                                    u.what().contains("${env.X}")
+                                            && u.place().file().equals(".m2/settings.xml")
+                                            && u.place().line() > 0);
+        }
+
+        @Test
+        void aMirrorWithoutAUrlIsNamed() throws IOException {
+            f.settings(
+                            "<settings><mirrors><mirror><id>m</id><mirrorOf>*</mirrorOf></mirror>"
+                                    + "</mirrors></settings>")
+                    .pom("pom.xml", project("child", ""));
+
+            assertThat(f.answer().unknowns())
+                    .as("a mirror of everything is not dropped silently")
+                    .anyMatch(u -> u.what().equals("mirror m"));
+        }
+
+        @Test
+        void aMirrorOfNothingNamedIsNamed() throws IOException {
+            f.settings(
+                            "<settings><mirrors><mirror><id>m</id>"
+                                    + "<url>https://m.example.org/</url></mirror></mirrors></settings>")
+                    .pom("pom.xml", project("child", ""));
+
+            assertThat(f.answer().unknowns())
+                    .as("Maven refuses such settings")
+                    .anyMatch(u -> u.what().equals("mirror m"));
+        }
+    }
+
+    /** Harm prevented: a person is asked to open a host the build never reaches. */
+    @Nested
+    class WhatTheBuildNeverReaches {
+        @Test
+        void aRepositoryWithBothPoliciesOffIsNoHost() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                              <repositories><repository>
+                                <id>r</id><url>https://off.example.org/m</url>
+                                <releases><enabled>false</enabled></releases>
+                                <snapshots><enabled>false</enabled></snapshots>
+                              </repository></repositories>
+                            """));
+
+            assertThat(hosts(f.answer())).as("nothing asks it").doesNotContain("off.example.org");
+        }
+
+        @Test
+        void aSettingsRepositoryWithBothPoliciesOffIsNoHost() throws IOException {
+            f.settings(
+                            """
+                            <settings><profiles><profile><id>p</id>
+                              <activation><activeByDefault>true</activeByDefault></activation>
+                              <repositories><repository>
+                                <id>r</id><url>https://off.example.org/m</url>
+                                <releases><enabled>false</enabled></releases>
+                                <snapshots><enabled>false</enabled></snapshots>
+                              </repository></repositories>
+                            </profile></profiles></settings>
+                            """)
+                    .pom("pom.xml", project("child", ""));
+
+            assertThat(hosts(f.answer())).as("nothing asks it").doesNotContain("off.example.org");
+        }
+
+        @Test
+        void aRepositoryWithOnePolicyOnIsAHost() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                              <repositories><repository>
+                                <id>r</id><url>https://on.example.org/m</url>
+                                <releases><enabled>false</enabled></releases>
+                              </repository></repositories>
+                            """));
+
+            assertThat(hosts(f.answer())).as("snapshots still ask it").contains("on.example.org");
+        }
+
+        @Test
+        void aBlockedMirrorIsNamedAndNoHost() throws IOException {
+            f.settings(
+                            """
+                            <settings><mirrors><mirror>
+                              <id>m</id><mirrorOf>*</mirrorOf><blocked>true</blocked>
+                              <url>https://blocked.example.org/</url>
+                            </mirror></mirrors></settings>
+                            """)
+                    .pom("pom.xml", project("child", ""));
+
+            RepositoryHostsAnswer answer = f.answer();
+
+            assertThat(hosts(answer))
+                    .as("it is never reached")
+                    .doesNotContain("blocked.example.org");
+            assertThat(answer.unknowns()).as("and said").anyMatch(u -> u.why().contains("blocks"));
+        }
+    }
+
+    /** Harm prevented: a pom full of repositories holds the plugin on a CPU. */
+    @Test
+    void aPomWithVeryManyRepositoriesEnds() throws IOException {
+        StringBuilder many = new StringBuilder("  <repositories>");
+        for (int i = 0; i < 50_000; i++) {
+            many.append(
+                    "<repository><id>r%d</id><url>https://h.example.org/%d</url></repository>"
+                            .formatted(i, i));
+        }
+        f.pom("pom.xml", project("child", many + "</repositories>\n"));
+
+        RepositoryHostsAnswer answer =
+                assertTimeoutPreemptively(Duration.ofSeconds(25), () -> f.answer());
+
+        assertThat(hosts(answer)).as("and answers").contains("h.example.org");
+    }
+
     /** Harm prevented: a repository the person's mirror covers is answered as reached directly. */
     @Nested
     class ARepositorysUrlAsMavenTakesItApart {
@@ -940,12 +1351,22 @@ class HostileValuesTest {
                 new Mirrors(
                         List.of(
                                 new UserSettings.Mirror(
-                                        "m", "https://m.example.org/", "external:*", "*", 1)));
+                                        "m",
+                                        "https://m.example.org/",
+                                        "external:*",
+                                        "*",
+                                        false,
+                                        1)));
         private final Mirrors externalHttp =
                 new Mirrors(
                         List.of(
                                 new UserSettings.Mirror(
-                                        "m", "https://m.example.org/", "external:http:*", "*", 1)));
+                                        "m",
+                                        "https://m.example.org/",
+                                        "external:http:*",
+                                        "*",
+                                        false,
+                                        1)));
 
         @ParameterizedTest
         @ValueSource(strings = {" https://evil.example.org/m", "https://LOCALHOST/m"})

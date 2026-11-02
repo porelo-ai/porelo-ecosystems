@@ -7,20 +7,28 @@ import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.apache.maven.model.Activation;
+import org.apache.maven.model.BuildBase;
+import org.apache.maven.model.Extension;
 import org.apache.maven.model.InputLocation;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.Plugin;
+import org.apache.maven.model.PluginManagement;
 import org.apache.maven.model.Profile;
 import org.apache.maven.model.Repository;
+import org.apache.maven.model.RepositoryPolicy;
 import org.apache.maven.model.building.DefaultModelBuilder;
 import org.apache.maven.model.building.DefaultModelBuilderFactory;
 import org.apache.maven.model.building.DefaultModelBuildingRequest;
@@ -42,6 +50,10 @@ public final class RepositoryHosts {
     private static final String ENV_PREFIX = "env.";
     private static final String EXTENSIONS = ".mvn/extensions.xml";
     private static final String MAVEN_CONFIG = ".mvn/maven.config";
+    private static final String JVM_CONFIG = ".mvn/jvm.config";
+    private static final String EXTENSION_LOADED =
+            "this loads a Maven extension, whose code can change the model; it is not loaded, so"
+                    + " the model is not trusted";
 
     private final Places places;
     private final UserSettings settings;
@@ -54,6 +66,7 @@ public final class RepositoryHosts {
     private final Set<Unplaced> unplaced = new LinkedHashSet<>();
     private final PomGuard guard;
     private final DefaultModelBuilder builder;
+    private boolean trusted = true;
 
     private RepositoryHosts(
             Path checkout, Path home, Path settingsFile, UserSettings settings, List<Path> roots) {
@@ -78,10 +91,11 @@ public final class RepositoryHosts {
      * @throws NotAMavenCheckoutException when the checkout holds no {@code pom.xml}
      */
     public static RepositoryHostsAnswer read(Path checkout, Path home) throws IOException {
-        Path settingsFile = home.resolve(".m2").resolve("settings.xml");
+        Path absoluteHome = home.toAbsolutePath();
+        Path settingsFile = absoluteHome.resolve(".m2").resolve("settings.xml");
         UserSettings settings = SettingsReader.read(settingsFile);
-        List<Path> roots = localRoots(settings.localRepository(), home);
-        return new RepositoryHosts(checkout, home, settingsFile, settings, roots).answer();
+        List<Path> roots = localRoots(settings.localRepository(), absoluteHome);
+        return new RepositoryHosts(checkout, absoluteHome, settingsFile, settings, roots).answer();
     }
 
     private RepositoryHostsAnswer answer() {
@@ -90,7 +104,18 @@ public final class RepositoryHosts {
         if (!Files.isRegularFile(rootPom)) {
             throw new NotAMavenCheckoutException(checkout.toString());
         }
-        boolean trusted = namedFiles(checkout);
+        namedFiles(checkout);
+        settings.unread()
+                .forEach(
+                        unreadValue ->
+                                unknowns.add(
+                                        new UnknownValue(
+                                                unreadValue.what(),
+                                                unreadValue.why(),
+                                                new Place(
+                                                        settingsPlace.file(),
+                                                        unreadValue.line(),
+                                                        settingsPlace.origin()))));
         settings.unknowns()
                 .forEach(
                         condition ->
@@ -117,22 +142,68 @@ public final class RepositoryHosts {
                 List.copyOf(hosts), List.copyOf(unknowns), List.copyOf(unplaced), trusted);
     }
 
-    private boolean namedFiles(Path checkout) {
-        if (Files.exists(checkout.resolve(MAVEN_CONFIG))) {
-            unplaced.add(
-                    new Unplaced(
-                            "this file can change Maven's options, and is not read",
-                            new Place(MAVEN_CONFIG, 0, Origin.CHECKOUT)));
-        }
+    private void namedFiles(Path checkout) {
+        optionsFile(checkout, MAVEN_CONFIG, OptionFiles.MAVEN_OPTIONS);
+        optionsFile(checkout, JVM_CONFIG, OptionFiles.JVM_OPTIONS);
         if (Files.exists(checkout.resolve(EXTENSIONS))) {
-            unplaced.add(
-                    new Unplaced(
-                            "this file loads Maven extensions, which can change the model; they are"
-                                    + " not loaded, so the model is not trusted",
-                            new Place(EXTENSIONS, 0, Origin.CHECKOUT)));
-            return false;
+            distrust(
+                    "this file loads Maven extensions, which can change the model; they are"
+                            + " not loaded, so the model is not trusted",
+                    new Place(EXTENSIONS, 0, Origin.CHECKOUT));
         }
-        return true;
+    }
+
+    private void optionsFile(Path checkout, String name, Pattern harmless) {
+        Path file = checkout.resolve(name);
+        if (Files.exists(file) && !OptionFiles.leaveTheModelAlone(file, harmless, places)) {
+            distrust(
+                    "this file holds options that can change the model or run code; they are not"
+                            + " applied, so the model is not trusted",
+                    new Place(name, 0, Origin.CHECKOUT));
+        }
+    }
+
+    private void distrust(String why, Place place) {
+        trusted = false;
+        unplaced.add(new Unplaced(why, place));
+    }
+
+    // In the effective model, so a plugin managed elsewhere counts only once a build uses it.
+    private void answerExtensions(Model model, ModelBuildingResult result) {
+        if (model.getBuild() != null) {
+            model.getBuild().getExtensions().forEach(this::distrustExtension);
+            PluginManagement managed = model.getBuild().getPluginManagement();
+            model.getBuild().getPlugins().forEach(plugin -> answerPlugin(plugin, managed));
+        }
+        result.getModelIds().stream()
+                .map(result::getRawModel)
+                .filter(Objects::nonNull)
+                .flatMap(raw -> raw.getProfiles().stream())
+                .filter(profile -> conditionOf(profile.getActivation()) != null)
+                .map(Profile::getBuild)
+                .filter(Objects::nonNull)
+                .map(BuildBase::getPlugins)
+                .forEach(plugins -> plugins.forEach(plugin -> answerPlugin(plugin, null)));
+    }
+
+    private void distrustExtension(Extension extension) {
+        distrust(EXTENSION_LOADED, places.of(extension.getLocation("")));
+    }
+
+    private void answerPlugin(Plugin plugin, @Nullable PluginManagement managed) {
+        Plugin stated = plugin;
+        if (plugin.getExtensions() == null && managed != null) {
+            stated =
+                    managed.getPlugins().stream()
+                            .filter(other -> other.getKey().equals(plugin.getKey()))
+                            .findFirst()
+                            .orElse(plugin);
+        }
+        String extensions = stated.getExtensions();
+        if (extensions != null && !extensions.equals("false")) {
+            InputLocation at = stated.getLocation("extensions");
+            distrust(EXTENSION_LOADED, places.of(at != null ? at : stated.getLocation("")));
+        }
     }
 
     private List<Path> readPom(Path pom) {
@@ -146,6 +217,7 @@ public final class RepositoryHosts {
         }
         try {
             ModelBuildingResult result = builder.build(request(pom));
+            unknowns.addAll(guard.takeOutside());
             takeRefusals();
             answerModel(result, pom);
             return modulesOf(result.getEffectiveModel(), pom);
@@ -189,6 +261,7 @@ public final class RepositoryHosts {
     }
 
     private void answerFailure(ModelBuildingException failure, Path pom) {
+        unknowns.addAll(guard.takeOutside());
         List<UnknownValue> refusals = guard.takeRefusals();
         if (!refusals.isEmpty()) {
             unknowns.addAll(refusals);
@@ -216,18 +289,18 @@ public final class RepositoryHosts {
         var properties = new PropertyPlaces(result, places, settings, settingsPlace);
         Model model = result.getEffectiveModel();
         answerProblems(result, pom);
+        answerExtensions(model, result);
+        Map<Spot, Repository> raws = rawRepositories(result);
         model.getRepositories()
                 .forEach(
-                        r ->
-                                answerRepository(
-                                        r, RepositoryHost.Kind.REPOSITORY, result, properties));
+                        r -> answerRepository(r, RepositoryHost.Kind.REPOSITORY, raws, properties));
         model.getPluginRepositories()
                 .forEach(
                         r ->
                                 answerRepository(
                                         r,
                                         RepositoryHost.Kind.PLUGIN_REPOSITORY,
-                                        result,
+                                        raws,
                                         properties));
         result.getModelIds().forEach(id -> answerConditionalProfiles(result, id));
     }
@@ -251,11 +324,15 @@ public final class RepositoryHosts {
     private void answerRepository(
             Repository repository,
             RepositoryHost.Kind kind,
-            ModelBuildingResult result,
+            Map<Spot, Repository> raws,
             PropertyPlaces properties) {
+        // Maven asks such a repository for nothing.
+        if (isOff(repository.getReleases()) && isOff(repository.getSnapshots())) {
+            return;
+        }
         InputLocation at = repository.getLocation("url");
         Place place = places.of(at != null ? at : repository.getLocation(""));
-        Repository raw = rawOf(repository, result);
+        Repository raw = rawOf(repository, raws);
         String url = repository.getUrl() == null ? "" : repository.getUrl();
         if (repository.getId() == null && raw != null && raw.getId() != null) {
             unknowns.add(
@@ -273,6 +350,7 @@ public final class RepositoryHosts {
                         repository.getLayout());
         if (mirror.isPresent()) {
             answerMirror(mirror.get());
+            answerWhatTheMirrorAsks(mirror.get(), repository, url, place);
             return;
         }
         PropertyPlaces.Trace trace = properties.of(written(raw));
@@ -309,6 +387,29 @@ public final class RepositoryHosts {
                                                 server(id, place))));
     }
 
+    private static boolean isOff(@Nullable RepositoryPolicy policy) {
+        return policy != null && "false".equalsIgnoreCase(policy.getEnabled());
+    }
+
+    // A pattern other than everything can turn the build away, by what could not be filled in.
+    private void answerWhatTheMirrorAsks(
+            UserSettings.Mirror mirror, Repository repository, String url, Place place) {
+        if (mirror.mirrorOf().equals("*")) {
+            return;
+        }
+        String asked = repository.getId() + (mirror.mirrorOf().contains("external:") ? url : "");
+        Matcher matcher = PropertyPlaces.EXPRESSION.matcher(asked);
+        while (matcher.find()) {
+            unknowns.add(
+                    new UnknownValue(
+                            "${" + SafeText.of(matcher.group(1)) + "}",
+                            "whether a repository goes to mirror "
+                                    + SafeText.of(mirror.id())
+                                    + " depends on this, which nothing read here fills in",
+                            place));
+        }
+    }
+
     private static String written(@Nullable Repository raw) {
         return raw == null ? "" : raw.getId() + " " + raw.getUrl();
     }
@@ -340,6 +441,15 @@ public final class RepositoryHosts {
     private void answerMirror(UserSettings.Mirror mirror) {
         Place place = new Place(settingsPlace.file(), mirror.line(), settingsPlace.origin());
         String id = SafeText.of(mirror.id());
+        if (mirror.blocked()) {
+            unknowns.add(
+                    new UnknownValue(
+                            "mirror " + id,
+                            "the settings mark it as blocked, so Maven blocks a build that would"
+                                    + " go through it, and no host is reached",
+                            place));
+            return;
+        }
         if (holdsExpression(mirror.url(), place, id)) {
             return;
         }
@@ -404,12 +514,14 @@ public final class RepositoryHosts {
     }
 
     // By its place: an id can be shared and can hold a property, and a model's own id too.
-    private @Nullable Repository rawOf(Repository repository, ModelBuildingResult result) {
+    private static @Nullable Repository rawOf(Repository repository, Map<Spot, Repository> raws) {
         String key = repository.getLocation("url") != null ? "url" : "";
         InputLocation at = repository.getLocation(key);
-        if (at == null) {
-            return null;
-        }
+        return at == null ? null : raws.get(Spot.of(key, at));
+    }
+
+    // Once per pom: a pom can hold more repositories than asking each of them for each would bear.
+    private Map<Spot, Repository> rawRepositories(ModelBuildingResult result) {
         Stream<Repository> inSettings =
                 settings.activeProfiles().stream().flatMap(RepositoryHosts::repositoriesOf);
         Stream<Repository> inPoms =
@@ -417,10 +529,18 @@ public final class RepositoryHosts {
                         .map(result::getRawModel)
                         .filter(Objects::nonNull)
                         .flatMap(RepositoryHosts::allRepositories);
-        return Stream.concat(inSettings, inPoms)
-                .filter(r -> samePlace(r.getLocation(key), at))
-                .findFirst()
-                .orElse(null);
+        Map<Spot, Repository> raws = new HashMap<>();
+        Stream.concat(inSettings, inPoms)
+                .forEach(
+                        raw -> {
+                            for (String key : List.of("url", "")) {
+                                InputLocation at = raw.getLocation(key);
+                                if (at != null && at.getSource() != null) {
+                                    raws.putIfAbsent(Spot.of(key, at), raw);
+                                }
+                            }
+                        });
+        return raws;
     }
 
     private static Stream<Repository> repositoriesOf(Profile profile) {
@@ -432,15 +552,6 @@ public final class RepositoryHosts {
         return Stream.concat(
                 Stream.concat(raw.getRepositories().stream(), raw.getPluginRepositories().stream()),
                 raw.getProfiles().stream().flatMap(RepositoryHosts::repositoriesOf));
-    }
-
-    private static boolean samePlace(@Nullable InputLocation one, InputLocation other) {
-        return one != null
-                && one.getLineNumber() == other.getLineNumber()
-                && one.getColumnNumber() == other.getColumnNumber()
-                && one.getSource() != null
-                && other.getSource() != null
-                && Objects.equals(one.getSource().getLocation(), other.getSource().getLocation());
     }
 
     private void answerConditionalProfiles(ModelBuildingResult result, String modelId) {
@@ -541,6 +652,14 @@ public final class RepositoryHosts {
         return roots;
     }
 
+    /** Where a value stands, to tell one repository from another. */
+    private record Spot(String key, @Nullable String source, int line, int column) {
+        static Spot of(String key, InputLocation at) {
+            String source = at.getSource() == null ? null : at.getSource().getLocation();
+            return new Spot(key, source, at.getLineNumber(), at.getColumnNumber());
+        }
+    }
+
     /**
      * The checkout itself: Maven's own looks for a directory above it, and fails on finding none.
      */
@@ -572,7 +691,10 @@ public final class RepositoryHosts {
         @Override
         protected ModelProcessor newModelProcessor() {
             PomGuard created = new PomGuard(super.newModelProcessor(), places);
-            guard = created;
+            // The builder asks first; the second is the super pom's, and reads nothing else.
+            if (guard == null) {
+                guard = created;
+            }
             return created;
         }
 

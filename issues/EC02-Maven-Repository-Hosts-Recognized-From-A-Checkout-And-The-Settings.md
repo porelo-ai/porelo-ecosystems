@@ -18,7 +18,8 @@ Built on `maven-model-builder` alone in `plugins/maven`, package `org.fuin.porel
 7. **`PomGuard`** wraps the model processor, the one place every pom is read: size and count limits, a DTD refused with the file's name, and nothing read outside the checkout and the local repository, symbolic links resolved first; only the checkout is walked, so a module linked elsewhere is named and not read. A profile's activation stays unfilled, since the builder fills it in without a bound and nothing here evaluates it. **`BoundedInterpolator`** bounds what filling in a model's values may grow to, measured while filling in. A pom on which the builder gives up is an unknown naming it, and the walk goes on.
 8. **`SettingsReader`**: hardened StAX with lines for the local repository, mirrors, server ids, and profiles; a password's element is skipped, never held. Settings profiles enter the builder as profiles, so their properties and repositories merge as Maven merges them.
 9. **Mirrors** replace what they mirror, as Maven selects them: an exact id first, then the first pattern, with `*`, `external:*`, `external:http:*`, a list and `!`, each only for a layout it names, a URL taken apart as Maven takes it. A mirror is selected before the URL it replaces is looked at.
-10. **`.mvn/extensions.xml`** is named as an unplaced finding and the answer marked as not trusted; nothing of it is opened. `.mvn/maven.config` is named as an unplaced finding too, since it can change Maven's options.
+10. **What the checkout can change unread** marks the answer as not trusted and is named as an unplaced finding: `.mvn/extensions.xml`, whose content is never opened; an extension a pom loads, at any level, or in a profile on a condition; and `.mvn/maven.config` or `.mvn/jvm.config` holding any option but those known to leave the model alone. A list of harmless options fails closed, and keeps a checkout that only sets its heap or its local repository's parts trusted.
+11. **What the build never reaches is no host:** a repository with both policies off, and a blocked mirror, which is named. **What Maven would fill in or refuse in the settings** is named too: a `${…}` in what a mirror covers, in an active profile or in the local repository, and a mirror lacking a URL or what it mirrors. A mirror whose pattern asks a value that could not be filled in is answered with an unknown naming it.
 
 ## Acceptance
 
@@ -42,6 +43,9 @@ Built on `maven-model-builder` alone in `plugins/maven`, package `org.fuin.porel
 - **Imported BOMs are not needed.** Against the builder and real Maven, a repository and a property declared in an imported BOM or its parent do not reach the effective model; a Java release set there (17, 11) stays the pom's (25). With two-phase building stopped after the first phase the resolver is not called for the import, and a missing BOM answers the same repositories and properties. Only the managed versions are lost, so a later value needs a BOM only if it is a dependency's managed version; a Java release never does.
 - One run of real Maven on a fixture takes about 2.7 s, so the comparison costs seconds per fixture.
 - **Maven applies a settings profile `activeByDefault` beside an explicit one**, measured against real Maven: a test here assumed it stands back, and the comparison refuted it.
+- **Maven takes a parent with an empty `relativePath` from the local repository, even where the checkout's own reactor holds it**, measured against real Maven 3.9.15; the answer does the same.
+- **A settings profile `activeByDefault` does not activate a pom's profile of its id, nor stop a pom's default one**, measured against real Maven; that fixture is part of the comparison.
+- **`.mvn/maven.config` and `.mvn/jvm.config` each redirect a repository** of the person's settings through a property, measured against real Maven 3.9.15; `-Dmaven.repo.central` in `jvm.config` moves nothing there.
 - **On six of Porelo's own checkouts** the answer takes 7 to 640 ms and holds what their poms and settings name: the unknowns are the profiles on a property, with their files and lines, and nothing else.
 
 ## Declined from the review
@@ -52,3 +56,12 @@ Built on `maven-model-builder` alone in `plugins/maven`, package `org.fuin.porel
 - **`${rootDirectory}` as a property being unknown:** the builder's own source comes first, so such a property only ever fills in where Maven finds no root; it costs a harmless repository, and an unknown says so.
 - **An empty `<mirrorOfLayouts/>` meaning `default,legacy`:** both of Maven's selectors, read in its source, treat empty as any layout, as here.
 - **`anExactIdWinsOverAnEarlierPattern` proving nothing:** a selection without the exact id first turned it red when broken so.
+- **A reactor parent looked up in the checkout:** real Maven takes the local copy, as measured above.
+- **An origin compared against real Maven:** Maven has no such notion, so there is nothing to compare it with; the fixtures name it instead.
+- **The comparison run offline:** a first run on a clean machine fetches the help plugin it compares with, and offline it could not start.
+
+## Open
+
+- **Builder and comparison differ in version:** the module builds on `maven-model-builder` 3.10.0 and compares with the wrapper's Maven 3.9.15, so what only 3.10 does has no reference.
+- **Credentials:** a `ServerReference` matches by id alone, while Maven 3.10 can hold a credential back from a host not declared for that server.
+- **Not read:** the settings' proxies, and the global settings of a Maven installation.

@@ -19,10 +19,12 @@ import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
+import org.apache.maven.model.Activation;
 import org.apache.maven.model.InputLocation;
 import org.apache.maven.model.InputSource;
 import org.apache.maven.model.Profile;
 import org.apache.maven.model.Repository;
+import org.apache.maven.model.RepositoryPolicy;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -52,6 +54,7 @@ final class SettingsReader {
     private final Map<String, Integer> servers = new LinkedHashMap<>();
     private final List<ProfileDraft> profiles = new ArrayList<>();
     private final Set<String> activeIds = new LinkedHashSet<>();
+    private final List<UserSettings.Unread> unread = new ArrayList<>();
     private @Nullable ProfileDraft profile;
     private @Nullable MirrorDraft mirror;
     private @Nullable RepositoryDraft repository;
@@ -106,6 +109,7 @@ final class SettingsReader {
         int column = reader.getLocation().getColumnNumber();
         if (parent.equals(MIRRORS) && name.equals("mirror")) {
             mirror = new MirrorDraft();
+            mirror.line = line;
         } else if (parent.equals(PROFILES) && name.equals("profile")) {
             profile = new ProfileDraft();
             profiles.add(profile);
@@ -118,6 +122,11 @@ final class SettingsReader {
         }
         if (name.equals("localRepository") && parent.equals("settings")) {
             localRepository = text(reader);
+            nameWhatMavenFillsIn(
+                    localRepository.replace("${user.home}", ""),
+                    localRepository,
+                    "the local repository",
+                    line);
             return;
         }
         if (name.equals("id") && parent.equals(SERVER)) {
@@ -125,7 +134,9 @@ final class SettingsReader {
             return;
         }
         if (name.equals("activeProfile") && parent.equals(ACTIVE_PROFILES)) {
-            activeIds.add(text(reader));
+            String id = text(reader);
+            activeIds.add(id);
+            nameWhatMavenFillsIn(id, id, "an active profile", line);
             return;
         }
         if (parent.equals(MIRROR) && mirror != null && takeMirror(reader, name, line)) {
@@ -135,6 +146,9 @@ final class SettingsReader {
             if (repository != null && takeRepository(reader, name, line, column)) {
                 return;
             }
+        }
+        if (repository != null && name.equals("enabled") && takePolicy(reader, parent)) {
+            return;
         }
         if (profile != null && takeProfile(reader, name, parent)) {
             return;
@@ -161,6 +175,7 @@ final class SettingsReader {
             }
             case "mirrorOf" -> draft.mirrorOf = text(reader);
             case "mirrorOfLayouts" -> draft.layouts = text(reader);
+            case "blocked" -> draft.blocked = text(reader).equals("true");
             default -> {
                 return false;
             }
@@ -183,6 +198,32 @@ final class SettingsReader {
             }
         }
         return true;
+    }
+
+    private boolean takePolicy(XMLStreamReader reader, String parent) throws XMLStreamException {
+        RepositoryDraft draft = java.util.Objects.requireNonNull(repository);
+        boolean inRepository =
+                parent.startsWith(REPOSITORY) || parent.startsWith(PLUGIN_REPOSITORY);
+        if (inRepository && parent.endsWith("/releases")) {
+            draft.releases = text(reader);
+            return true;
+        }
+        if (inRepository && parent.endsWith("/snapshots")) {
+            draft.snapshots = text(reader);
+            return true;
+        }
+        return false;
+    }
+
+    // Maven fills the settings in from where the build runs; nothing here reads that.
+    private void nameWhatMavenFillsIn(String checked, String written, String what, int line) {
+        if (checked.contains("${")) {
+            unread.add(
+                    new UserSettings.Unread(
+                            SafeText.of(written),
+                            what + " is written with this, which depends on where the build runs",
+                            line));
+        }
     }
 
     private boolean takeProfile(XMLStreamReader reader, String name, String parent)
@@ -215,16 +256,7 @@ final class SettingsReader {
         }
         String parent = where();
         if (parent.equals(MIRRORS) && name.equals("mirror")) {
-            MirrorDraft draft = mirror;
-            if (draft != null && draft.url != null && draft.mirrorOf != null) {
-                mirrors.add(
-                        new UserSettings.Mirror(
-                                draft.id == null ? "default" : draft.id,
-                                draft.url,
-                                draft.mirrorOf,
-                                draft.layouts,
-                                draft.line));
-            }
+            finishMirror(java.util.Objects.requireNonNull(mirror));
             mirror = null;
         } else if (parent.equals(REPOSITORIES) && name.equals("repository")
                 || parent.equals(PLUGIN_REPOSITORIES) && name.equals("pluginRepository")) {
@@ -237,15 +269,29 @@ final class SettingsReader {
         }
     }
 
+    private void finishMirror(MirrorDraft draft) {
+        String id = draft.id == null ? "default" : draft.id;
+        if (draft.url == null || draft.mirrorOf == null) {
+            unread.add(
+                    new UserSettings.Unread(
+                            "mirror " + SafeText.of(id),
+                            "it lacks a URL or what it mirrors, and Maven refuses such settings",
+                            draft.line));
+            return;
+        }
+        nameWhatMavenFillsIn(draft.mirrorOf, draft.mirrorOf, "what a mirror covers", draft.line);
+        mirrors.add(
+                new UserSettings.Mirror(
+                        id, draft.url, draft.mirrorOf, draft.layouts, draft.blocked, draft.line));
+    }
+
     private UserSettings settings() {
         List<Profile> active = new ArrayList<>();
-        Set<String> ids = new LinkedHashSet<>(activeIds);
         Map<String, Integer> propertyLines = new HashMap<>();
         List<UserSettings.SettingsCondition> conditional = new ArrayList<>();
         for (ProfileDraft draft : profiles) {
             if (activeIds.contains(draft.id) || draft.activeByDefault) {
                 active.add(draft.toProfile());
-                ids.add(draft.id);
                 propertyLines.putAll(draft.propertyLines);
             } else if (!draft.conditions.isEmpty()) {
                 conditional.add(
@@ -258,9 +304,10 @@ final class SettingsReader {
                 mirrors,
                 servers,
                 active,
-                List.copyOf(ids),
+                List.copyOf(activeIds),
                 propertyLines,
-                conditional);
+                conditional,
+                unread);
     }
 
     private static String text(XMLStreamReader reader) throws XMLStreamException {
@@ -272,6 +319,7 @@ final class SettingsReader {
         @Nullable String url;
         @Nullable String mirrorOf;
         String layouts = DEFAULT_LAYOUTS;
+        boolean blocked;
         int line;
     }
 
@@ -280,6 +328,8 @@ final class SettingsReader {
         @Nullable String url;
         @Nullable InputLocation urlLocation;
         @Nullable String layout;
+        @Nullable String releases;
+        @Nullable String snapshots;
         boolean plugin;
     }
 
@@ -295,6 +345,13 @@ final class SettingsReader {
         Profile toProfile() {
             Profile result = new Profile();
             result.setId(id);
+            // Its id named nowhere: a pom's profile of the same id stays as it is.
+            result.setSource(Profile.SOURCE_SETTINGS);
+            if (activeByDefault) {
+                Activation activation = new Activation();
+                activation.setActiveByDefault(true);
+                result.setActivation(activation);
+            }
             properties.forEach(result::addProperty);
             for (RepositoryDraft draft : repositories) {
                 if (draft.url == null) {
@@ -304,6 +361,8 @@ final class SettingsReader {
                 repository.setId(draft.id == null ? "default" : draft.id);
                 repository.setUrl(draft.url);
                 repository.setLocation("url", draft.urlLocation);
+                repository.setReleases(policy(draft.releases));
+                repository.setSnapshots(policy(draft.snapshots));
                 if (draft.layout != null) {
                     repository.setLayout(draft.layout);
                 }
@@ -314,6 +373,15 @@ final class SettingsReader {
                 }
             }
             return result;
+        }
+
+        private static @Nullable RepositoryPolicy policy(@Nullable String enabled) {
+            if (enabled == null) {
+                return null;
+            }
+            RepositoryPolicy policy = new RepositoryPolicy();
+            policy.setEnabled(enabled);
+            return policy;
         }
     }
 }

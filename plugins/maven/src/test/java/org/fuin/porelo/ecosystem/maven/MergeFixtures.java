@@ -240,6 +240,40 @@ final class MergeFixtures {
                                         + repository("r", "https://${repo.host}/maven")));
     }
 
+    static void defaultSettingsProfileSharingAPomProfilesId(Fixture f) throws IOException {
+        f.settings(
+                        """
+                        <settings><profiles><profile>
+                          <id>corp</id>
+                          <activation><activeByDefault>true</activeByDefault></activation>
+                          <repositories>
+                            <repository><id>s</id><url>https://settings.example.org/m</url></repository>
+                          </repositories>
+                        </profile></profiles></settings>
+                        """)
+                .pom(
+                        "pom.xml",
+                        project(
+                                "child",
+                                """
+                                  <profiles>
+                                    <profile>
+                                      <id>corp</id>
+                                      <repositories>
+                                        <repository><id>c</id><url>https://pomcorp.example.org/m</url></repository>
+                                      </repositories>
+                                    </profile>
+                                    <profile>
+                                      <id>other</id>
+                                      <activation><activeByDefault>true</activeByDefault></activation>
+                                      <repositories>
+                                        <repository><id>o</id><url>https://other.example.org/m</url></repository>
+                                      </repositories>
+                                    </profile>
+                                  </profiles>
+                                """));
+    }
+
     static void leadingDotInAnExpression(Fixture f) throws IOException {
         f.pom(
                 "pom.xml",

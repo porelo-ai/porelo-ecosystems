@@ -35,6 +35,7 @@ final class PomGuard implements ModelProcessor {
     private final ModelProcessor delegate;
     private final Places places;
     private final List<UnknownValue> refusals = new ArrayList<>();
+    private final List<UnknownValue> outside = new ArrayList<>();
     private int reads;
 
     PomGuard(ModelProcessor delegate, Places places) {
@@ -46,6 +47,13 @@ final class PomGuard implements ModelProcessor {
     List<UnknownValue> takeRefusals() {
         List<UnknownValue> taken = List.copyOf(refusals);
         refusals.clear();
+        return taken;
+    }
+
+    /** What was passed over since the last call, as outside what is read; empties the list. */
+    List<UnknownValue> takeOutside() {
+        List<UnknownValue> taken = List.copyOf(outside);
+        outside.clear();
         return taken;
     }
 
@@ -65,6 +73,15 @@ final class PomGuard implements ModelProcessor {
             }
             Path file = fileOf(source);
             if (file == null || !places.mayRead(file)) {
+                outside.add(
+                        new UnknownValue(
+                                "a parent's relativePath",
+                                "it names a pom outside the checkout, which Maven reads and nothing"
+                                        + " here does; a parent of the same coordinates can stand in"
+                                        + " for it",
+                                file == null
+                                        ? new Place("pom", 0, Origin.CHECKOUT)
+                                        : places.asNamedInTheCheckout(file)));
                 return outsideModel();
             }
             byte[] bytes = readBounded(in, source);

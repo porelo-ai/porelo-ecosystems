@@ -12,9 +12,10 @@ import org.jspecify.annotations.Nullable;
  * @param mirrors the mirrors, in their order
  * @param servers each server id with its line
  * @param activeProfiles the profiles Maven would apply without asking, as Maven's own type
- * @param activeProfileIds the ids that activate a profile, in the settings or in a pom
+ * @param activeProfileIds the ids the settings name to activate a profile, there or in a pom
  * @param propertyPlaces where each property of those profiles stands
  * @param unknowns what depends on where the build runs
+ * @param unread what Maven would fill in or refuse, and nothing here does
  */
 record UserSettings(
         @Nullable String localRepository,
@@ -23,13 +24,20 @@ record UserSettings(
         List<Profile> activeProfiles,
         List<String> activeProfileIds,
         Map<String, Integer> propertyPlaces,
-        List<SettingsCondition> unknowns) {
+        List<SettingsCondition> unknowns,
+        List<Unread> unread) {
 
     static final UserSettings NONE =
-            new UserSettings(null, List.of(), Map.of(), List.of(), List.of(), Map.of(), List.of());
+            new UserSettings(
+                    null, List.of(), Map.of(), List.of(), List.of(), Map.of(), List.of(),
+                    List.of());
 
     /** A mirror as the settings write it. */
-    record Mirror(String id, String url, String mirrorOf, String layouts, int line) {}
+    record Mirror(
+            String id, String url, String mirrorOf, String layouts, boolean blocked, int line) {}
+
+    /** A value of the settings that cannot be taken as it is written. */
+    record Unread(String what, String why, int line) {}
 
     /** A settings profile activated by something other than the settings themselves. */
     record SettingsCondition(String profile, String condition, int line) {}

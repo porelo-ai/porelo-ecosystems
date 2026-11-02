@@ -9,16 +9,20 @@ import java.util.Optional;
 record HostUrl(String host, String url) {
     static Optional<HostUrl> parse(String written) {
         try {
-            URI uri = new URI(written.strip());
+            // Encoded as written: what a decoded path holds can reorder a terminal's text.
+            URI uri = new URI(new URI(written.strip()).toASCIIString());
             String host = uri.getHost();
             if (host == null
                     || uri.getScheme() == null
                     || uri.getScheme().equalsIgnoreCase("file")) {
                 return Optional.empty();
             }
-            URI bare =
-                    new URI(uri.getScheme(), null, host, uri.getPort(), uri.getPath(), null, null);
-            return Optional.of(new HostUrl(host.toLowerCase(Locale.ROOT), bare.toString()));
+            String port = uri.getPort() < 0 ? "" : ":" + uri.getPort();
+            String path = uri.getRawPath() == null ? "" : uri.getRawPath();
+            return Optional.of(
+                    new HostUrl(
+                            host.toLowerCase(Locale.ROOT),
+                            uri.getScheme() + "://" + host + port + path));
         } catch (URISyntaxException e) {
             return Optional.empty();
         }

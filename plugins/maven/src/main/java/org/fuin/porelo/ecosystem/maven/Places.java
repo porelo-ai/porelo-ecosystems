@@ -45,13 +45,13 @@ final class Places {
 
     Place of(Path file, int line) {
         Path real = realOrNormal(file);
-        if (real.equals(settings)) {
-            return new Place(relativeToHome(real), line, Origin.YOURS);
-        }
+        // First: settings standing in the checkout are written by whoever can push.
         if (real.startsWith(checkout)) {
-            return new Place(checkout.relativize(real).toString(), line, Origin.CHECKOUT);
+            String inCheckout = SafeText.of(checkout.relativize(real).toString());
+            return new Place(inCheckout, line, Origin.CHECKOUT);
         }
-        return new Place(relativeToHome(real), line, Origin.MACHINE);
+        Origin origin = real.equals(settings) ? Origin.YOURS : Origin.MACHINE;
+        return new Place(SafeText.of(relativeToHome(real)), line, origin);
     }
 
     /** Whether a file lies in the checkout or a local repository, its links followed. */
@@ -72,7 +72,7 @@ final class Places {
     Place asNamedInTheCheckout(Path pom) {
         Path named = pom.toAbsolutePath().normalize();
         String file = named.startsWith(checkout) ? checkout.relativize(named).toString() : "pom";
-        return new Place(file, 0, Origin.CHECKOUT);
+        return new Place(SafeText.of(file), 0, Origin.CHECKOUT);
     }
 
     /** A message of the builder's, which names files by the machine's paths. */
@@ -90,12 +90,14 @@ final class Places {
         return real.startsWith(home) ? home.relativize(real).toString() : real.toString();
     }
 
+    // Every pom's source is an absolute path; the built-in pom's is a jar's URL.
     private static @Nullable Path fileOf(@Nullable String location) {
-        if (location == null || location.isEmpty() || location.contains(":/")) {
+        if (location == null) {
             return null;
         }
         try {
-            return Path.of(location);
+            Path file = Path.of(location);
+            return file.isAbsolute() ? file : null;
         } catch (InvalidPathException e) {
             return null;
         }

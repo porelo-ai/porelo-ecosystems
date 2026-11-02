@@ -60,6 +60,9 @@ class RealMavenComparisonTest {
                         "an explicit settings profile beside a default one",
                         (Build) MergeFixtures::explicitSettingsProfileBesideADefaultOne),
                 Arguments.of(
+                        "a default settings profile sharing a pom profile's id",
+                        (Build) MergeFixtures::defaultSettingsProfileSharingAPomProfilesId),
+                Arguments.of(
                         "pom profiles named in the settings",
                         (Build) MergeFixtures::pomProfileNamedInTheSettings),
                 Arguments.of(
