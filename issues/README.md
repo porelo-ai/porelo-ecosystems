@@ -4,11 +4,16 @@ The open tasks of `porelo-ecosystems`, grouped by state; the order within a grou
 issue, and who sets which state, are in [AGENTS.md](../AGENTS.md). Its prefix is `EC`. A group with nothing in it is left
 out.
 
-## Backlog
+## Implementing
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
 | <a id="ec01"></a>[EC01](EC01-A-Spike-Of-The-Model-Builder-In-A-Native-Image.md) | S | - | Whether MIMA serves the Maven plugin as a native image, by measurement. |
+
+## Backlog
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
 | <a id="ec02"></a>[EC02](EC02-Maven-Repository-Hosts-Recognized-From-A-Checkout-And-The-Settings.md) | M | [EC01](README.md#ec01) | Given a checkout and the person's Maven settings, the Maven module answers which repository hosts a build must reach, each with its file and line and whose it is: the person's own settings, or the checkout's, which anybody who can push wrote. |
 
 ## Accepted
