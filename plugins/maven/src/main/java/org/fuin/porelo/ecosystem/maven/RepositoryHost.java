@@ -8,7 +8,7 @@ package org.fuin.porelo.ecosystem.maven;
  * @param url the URL without user info, query or fragment
  * @param kind what names it
  * @param place the line of its URL
- * @param server the server its id refers to
+ * @param server the server its id refers to; for a proxy, whether it has a credential of its own
  */
 public record RepositoryHost(
         String id, String host, String url, Kind kind, Place place, ServerReference server) {
@@ -20,7 +20,9 @@ public record RepositoryHost(
         /** A {@code <pluginRepository>}. */
         PLUGIN_REPOSITORY,
         /** A settings {@code <mirror>}, which replaces what it mirrors. */
-        MIRROR
+        MIRROR,
+        /** A settings {@code <proxy>}, which the build goes through. */
+        PROXY
     }
 
     /** Who wrote the line of its URL. */

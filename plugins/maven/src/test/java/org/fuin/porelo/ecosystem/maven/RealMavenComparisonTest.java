@@ -65,6 +65,18 @@ class RealMavenComparisonTest {
                 Arguments.of(
                         "a property in maven.config", (Build) MergeFixtures::propertyInMavenConfig),
                 Arguments.of(
+                        "global settings with a profile",
+                        (Build) MergeFixtures::globalSettingsWithAProfileAndAMirror),
+                Arguments.of(
+                        "an active id naming a global profile",
+                        (Build) MergeFixtures::anActiveIdNamingAGlobalProfile),
+                Arguments.of(
+                        "the user's profile over a global one of its id",
+                        (Build) MergeFixtures::theUsersProfileOverAGlobalOneOfItsId),
+                Arguments.of(
+                        "the settings configure writes, with a pom naming the repository",
+                        (Build) MergeFixtures::aRepositoryOfTheFileConfigureWrites),
+                Arguments.of(
                         "two properties on one line of maven.config",
                         (Build) MergeFixtures::twoPropertiesOnOneLineOfMavenConfig),
                 Arguments.of(

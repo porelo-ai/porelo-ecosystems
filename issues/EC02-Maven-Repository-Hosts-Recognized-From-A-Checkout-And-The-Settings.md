@@ -66,6 +66,6 @@ Built on `maven-model-builder` alone in `plugins/maven`, package `org.fuin.porel
 
 - **Builder and comparison differ in version:** the module builds on `maven-model-builder` 3.10.0 and compares with the wrapper's Maven 3.9.15, so what only 3.10 does has no reference.
 - **Credentials:** a `ServerReference` matches by id alone, while Maven 3.10 can hold a credential back from a host not declared for that server.
-- **Not read until [EC03](README.md#ec03):** the settings' proxies, and the global settings of a Maven installation, so `-gs` is named.
+- **Read since [EC03](README.md#ec03):** the settings' proxies and the global settings of a Maven installation.
 - **A settings profile on a property or a file** stays an unknown, though a pom's is evaluated.
 - **A `-D` or `-P` on the command line** is not seen: it is not in any file.

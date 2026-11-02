@@ -552,7 +552,6 @@ class UnusualPomsAndSettingsTest {
     /** Harm prevented: what the answer cannot follow in a file of options goes unsaid. */
     @ParameterizedTest
     @CsvSource({
-        ".mvn/maven.config, -gs",
         ".mvn/maven.config, -f",
         ".mvn/jvm.config, -javaagent:agent.jar",
     })
@@ -932,7 +931,7 @@ class UnusualPomsAndSettingsTest {
                                         "external:*",
                                         "*",
                                         false,
-                                        1)));
+                                        new Place("", 0, Origin.MACHINE))));
         private final Mirrors externalHttp =
                 new Mirrors(
                         List.of(
@@ -942,7 +941,7 @@ class UnusualPomsAndSettingsTest {
                                         "external:http:*",
                                         "*",
                                         false,
-                                        1)));
+                                        new Place("", 0, Origin.MACHINE))));
 
         @ParameterizedTest
         @ValueSource(strings = {" https://other.example.org/m", "https://LOCALHOST/m"})

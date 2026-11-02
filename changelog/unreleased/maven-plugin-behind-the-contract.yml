@@ -1,0 +1,2 @@
+title: The Maven plugin as a native executable in its own package, answering Porelo's contract with the JDK, Maven and system packages a checkout needs, its hosts, memory and credential ids, and writing the settings a task's Maven reads.
+type: added

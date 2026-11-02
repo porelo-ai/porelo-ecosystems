@@ -1,6 +1,6 @@
 # Builds the plugins on every change to them: compiled, unit tests run, and the shared checks of the root's validate.
 # Nothing goes to Maven Central: a plugin is a native executable in a package of its own, found at run time over the
-# contract, and nothing builds against an artifact here. Until a plugin builds a package, a push only builds and tests.
+# contract, and nothing builds against an artifact here. A push builds and tests the package; nothing publishes it yet.
 # Against porelo-parent as a snapshot while it is one (-U takes the newest), as the shared rules allow.
 name: Build
 
@@ -29,7 +29,7 @@ jobs:
         name: Build and test
         # Pinned, not ubuntu-latest.
         runs-on: ubuntu-24.04
-        # A run takes about 3 minutes; a slow runner must end, not run for GitHub's six hours.
+        # A run takes about 8 minutes, the executable most of them; a slow runner must end, not run for GitHub's six hours.
         timeout-minutes: 20
         steps:
             # Every commit, so the pushed range can be read.
@@ -42,8 +42,8 @@ jobs:
               uses: ./.github/actions/pinned-jdk
 
             # validate runs check-actions, check-shared, check-citations and check-readmes.
-            - name: Build, unit tests and the shared checks
-              run: ./mvnw -B -U -s settings.xml verify
+            - name: Build, tests, the executable and its package, and the shared checks
+              run: ./mvnw -B -U -s settings.xml -Pnative verify
 
             # A direct push to main never meets the pull request's check, so the push's own range is read here, by the
             # rule this commit carries. A tag checks the commit it names alone, a first commit too. The push that creates main names no start (all

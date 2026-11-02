@@ -21,7 +21,15 @@ final class MavenOptions {
     private static final String JVM_CONFIG = ".mvn/jvm.config";
     private static final int MAX_BYTES = 1024 * 1024;
     private static final Set<String> WITH_A_VALUE =
-            Set.of("-D", "--define", "-P", "--activate-profiles", "-s", "--settings");
+            Set.of(
+                    "-D",
+                    "--define",
+                    "-P",
+                    "--activate-profiles",
+                    "-s",
+                    "--settings",
+                    "-gs",
+                    "--global-settings");
     // These change how a build runs and reports, not what its model holds.
     private static final Pattern LEAVES_THE_MODEL_ALONE =
             Pattern.compile(
@@ -38,6 +46,8 @@ final class MavenOptions {
     private final List<Unplaced> notes = new ArrayList<>();
     private @Nullable String settings;
     private int settingsLine;
+    private @Nullable String globalSettings;
+    private int globalSettingsLine;
 
     private MavenOptions() {}
 
@@ -83,6 +93,16 @@ final class MavenOptions {
         return new Place(MAVEN_CONFIG, settingsLine, Origin.CHECKOUT);
     }
 
+    /** The global settings file named, as written; null when none is. */
+    @Nullable String globalSettings() {
+        return globalSettings;
+    }
+
+    /** Where the global settings file is named. */
+    Place globalSettingsPlace() {
+        return new Place(MAVEN_CONFIG, globalSettingsLine, Origin.CHECKOUT);
+    }
+
     /** A property as Maven's settings see it: what Maven was given comes first. */
     @Nullable String property(String name) {
         String value = user.getProperty(name);
@@ -122,6 +142,12 @@ final class MavenOptions {
                 profiles(value);
             } else if (argument.equals("-s") || argument.equals("--settings")) {
                 settings(value, i + 1);
+            } else if (argument.equals("-gs") || argument.equals("--global-settings")) {
+                globalSettings(value, i + 1);
+            } else if (argument.startsWith("--global-settings=")) {
+                globalSettings(argument.substring("--global-settings=".length()), i + 1);
+            } else if (argument.startsWith("-gs")) {
+                globalSettings(lines.get(i).stripLeading().substring(3), i + 1);
             } else if (argument.startsWith("--settings=")) {
                 settings(argument.substring("--settings=".length()), i + 1);
             } else if (argument.startsWith("-s") && !argument.startsWith("-s=")) {
@@ -136,6 +162,11 @@ final class MavenOptions {
                 notes.add(note("the option " + argument + " is not followed", MAVEN_CONFIG, i + 1));
             }
         }
+    }
+
+    private void globalSettings(String file, int line) {
+        globalSettings = file;
+        globalSettingsLine = line;
     }
 
     private void settings(String file, int line) {

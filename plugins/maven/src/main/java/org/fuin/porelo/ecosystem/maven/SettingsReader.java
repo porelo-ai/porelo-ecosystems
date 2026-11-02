@@ -38,6 +38,8 @@ final class SettingsReader {
     private static final String MIRRORS = "settings/mirrors";
     private static final String MIRROR = MIRRORS + "/mirror";
     private static final String SERVER = "settings/servers/server";
+    private static final String PROXIES = "settings/proxies";
+    private static final String PROXY = PROXIES + "/proxy";
     private static final String ACTIVE_PROFILES = "settings/activeProfiles";
     private static final String PROFILES = "settings/profiles";
     private static final String PROFILE = PROFILES + "/profile";
@@ -50,25 +52,29 @@ final class SettingsReader {
 
     private final Path file;
     private final MavenOptions options;
+    private final Places places;
     private final InputSource source = new InputSource();
     private final Deque<String> path = new ArrayDeque<>();
     private @Nullable String localRepository;
     private final List<UserSettings.Mirror> mirrors = new ArrayList<>();
-    private final Map<String, Integer> servers = new LinkedHashMap<>();
+    private final Map<String, Place> servers = new LinkedHashMap<>();
     private final List<ProfileDraft> profiles = new ArrayList<>();
     private final Set<String> activeIds = new LinkedHashSet<>();
     private final List<UserSettings.Unread> unread = new ArrayList<>();
+    private final List<UserSettings.Proxy> proxies = new ArrayList<>();
     private @Nullable ProfileDraft profile;
+    private @Nullable ProxyDraft proxy;
     private @Nullable MirrorDraft mirror;
     private @Nullable RepositoryDraft repository;
 
-    private SettingsReader(Path file, MavenOptions options) {
+    private SettingsReader(Path file, MavenOptions options, Places places) {
         this.file = file;
         this.options = options;
+        this.places = places;
         source.setLocation(file.toString());
     }
 
-    static UserSettings read(Path file, MavenOptions options) throws IOException {
+    static UserSettings read(Path file, MavenOptions options, Places places) throws IOException {
         byte[] bytes;
         try (InputStream in = Files.newInputStream(file)) {
             bytes = in.readNBytes(MAX_SETTINGS_BYTES + 1);
@@ -78,7 +84,7 @@ final class SettingsReader {
         if (bytes.length > MAX_SETTINGS_BYTES) {
             throw new IOException("larger than " + MAX_SETTINGS_BYTES + " bytes: " + file);
         }
-        return new SettingsReader(file, options).parse(bytes);
+        return new SettingsReader(file, options, places).parse(bytes);
     }
 
     private UserSettings parse(byte[] bytes) throws IOException {
@@ -114,6 +120,9 @@ final class SettingsReader {
         if (parent.equals(MIRRORS) && name.equals("mirror")) {
             mirror = new MirrorDraft();
             mirror.line = line;
+        } else if (parent.equals(PROXIES) && name.equals("proxy")) {
+            proxy = new ProxyDraft();
+            proxy.line = line;
         } else if (parent.equals(PROFILES) && name.equals("profile")) {
             profile = new ProfileDraft();
             profiles.add(profile);
@@ -134,7 +143,7 @@ final class SettingsReader {
             return;
         }
         if (name.equals("id") && parent.equals(SERVER)) {
-            servers.putIfAbsent(text(reader), line);
+            servers.putIfAbsent(text(reader), places.of(file, line));
             return;
         }
         if (name.equals("activeProfile") && parent.equals(ACTIVE_PROFILES)) {
@@ -144,6 +153,9 @@ final class SettingsReader {
             return;
         }
         if (parent.equals(MIRROR) && mirror != null && takeMirror(reader, name, line)) {
+            return;
+        }
+        if (parent.equals(PROXY) && proxy != null && takeProxy(reader, name, line)) {
             return;
         }
         if (parent.equals(REPOSITORY) || parent.equals(PLUGIN_REPOSITORY)) {
@@ -180,6 +192,31 @@ final class SettingsReader {
             case "mirrorOf" -> draft.mirrorOf = text(reader);
             case "mirrorOfLayouts" -> draft.layouts = text(reader);
             case "blocked" -> draft.blocked = text(reader).equals("true");
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean takeProxy(XMLStreamReader reader, String name, int line)
+            throws XMLStreamException {
+        ProxyDraft draft = java.util.Objects.requireNonNull(proxy);
+        switch (name) {
+            case "id" -> draft.id = text(reader);
+            case "active" -> draft.active = text(reader).equals("true");
+            case "protocol" -> draft.protocol = text(reader);
+            case "host" -> {
+                draft.host = text(reader);
+                draft.line = line;
+            }
+            case "port" -> draft.port = text(reader);
+            case "nonProxyHosts" -> draft.nonProxyHosts = text(reader);
+            // Whether it has one, and nothing of what the element holds.
+            case "username" -> {
+                draft.authenticated = true;
+                return false;
+            }
             default -> {
                 return false;
             }
@@ -226,7 +263,7 @@ final class SettingsReader {
                     new UserSettings.Unread(
                             written,
                             what + " is written with this, which depends on where the build runs",
-                            line));
+                            places.of(file, line)));
         }
     }
 
@@ -260,6 +297,9 @@ final class SettingsReader {
         if (parent.equals(MIRRORS) && name.equals("mirror")) {
             finishMirror(java.util.Objects.requireNonNull(mirror));
             mirror = null;
+        } else if (parent.equals(PROXIES) && name.equals("proxy")) {
+            finishProxy(java.util.Objects.requireNonNull(proxy));
+            proxy = null;
         } else if (parent.equals(REPOSITORIES) && name.equals("repository")
                 || parent.equals(PLUGIN_REPOSITORIES) && name.equals("pluginRepository")) {
             if (profile != null && repository != null) {
@@ -278,25 +318,60 @@ final class SettingsReader {
                     new UserSettings.Unread(
                             "mirror " + id,
                             "it lacks a URL or what it mirrors, and Maven refuses such settings",
-                            draft.line));
+                            places.of(file, draft.line)));
             return;
         }
         nameWhatMavenFillsIn(draft.mirrorOf, draft.mirrorOf, "what a mirror covers", draft.line);
         mirrors.add(
                 new UserSettings.Mirror(
-                        id, draft.url, draft.mirrorOf, draft.layouts, draft.blocked, draft.line));
+                        id,
+                        draft.url,
+                        draft.mirrorOf,
+                        draft.layouts,
+                        draft.blocked,
+                        places.of(file, draft.line)));
+    }
+
+    private void finishProxy(ProxyDraft draft) {
+        if (!draft.active) {
+            return;
+        }
+        String id = draft.id == null ? "default" : draft.id;
+        if (draft.host == null) {
+            unread.add(
+                    new UserSettings.Unread(
+                            "proxy " + id,
+                            "it names no host, and Maven refuses such settings",
+                            places.of(file, draft.line)));
+            return;
+        }
+        proxies.add(
+                new UserSettings.Proxy(
+                        id,
+                        draft.protocol,
+                        draft.host,
+                        draft.port,
+                        draft.nonProxyHosts,
+                        draft.authenticated,
+                        places.of(file, draft.line)));
     }
 
     private UserSettings settings() {
         List<Profile> active = new ArrayList<>();
+        List<Profile> idle = new ArrayList<>();
         List<UserSettings.SettingsCondition> conditional = new ArrayList<>();
         for (ProfileDraft draft : profiles) {
             if (activeIds.contains(draft.id) || draft.activeByDefault) {
                 active.add(draft.toProfile());
-            } else if (!draft.conditions.isEmpty()) {
+                continue;
+            }
+            idle.add(draft.toProfile());
+            if (!draft.conditions.isEmpty()) {
                 conditional.add(
                         new UserSettings.SettingsCondition(
-                                draft.id, String.join(", ", draft.conditions), draft.line));
+                                draft.id,
+                                String.join(", ", draft.conditions),
+                                places.of(file, draft.line)));
             }
         }
         return new UserSettings(
@@ -306,7 +381,9 @@ final class SettingsReader {
                 active,
                 List.copyOf(activeIds),
                 conditional,
-                unread);
+                unread,
+                idle,
+                proxies);
     }
 
     // Maven fills in the settings when it reads them, before any pom's property counts.
@@ -319,6 +396,17 @@ final class SettingsReader {
                             String value = options.property(match.group(1));
                             return Matcher.quoteReplacement(value != null ? value : match.group());
                         });
+    }
+
+    private static final class ProxyDraft {
+        @Nullable String id;
+        boolean active = true;
+        String protocol = "http";
+        @Nullable String host;
+        String port = "8080";
+        String nonProxyHosts = "";
+        boolean authenticated;
+        int line;
     }
 
     private static final class MirrorDraft {

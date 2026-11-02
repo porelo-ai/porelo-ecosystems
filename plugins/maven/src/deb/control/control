@@ -1,0 +1,11 @@
+Package: porelo-ecosystem-maven
+Version: [[package.version]]
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Michael Schnell <michael@fuin.org>
+Homepage: https://github.com/porelo-ai/porelo-ecosystems
+Description: Recognizes what a Maven checkout needs, for Porelo
+ Installs one program under /usr/libexec/porelo/ecosystems, where the porelo
+ binary finds its build-tool plugins. It reads a checkout's poms and the
+ person's Maven settings, runs no project code and opens no connection.

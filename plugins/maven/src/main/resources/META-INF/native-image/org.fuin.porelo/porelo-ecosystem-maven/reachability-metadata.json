@@ -1,0 +1,223 @@
+{
+  "reflection": [
+    {
+      "type": "com.sun.xml.internal.stream.XMLInputFactoryImpl",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": []
+        }
+      ]
+    },
+    {
+      "type": "java.lang.Boolean",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "getBoolean",
+          "parameterTypes": [
+            "java.lang.String"
+          ]
+        }
+      ]
+    },
+    {
+      "type": "org.slf4j.nop.NOPServiceProvider"
+    },
+    {
+      "type": "org.apache.maven.model.Activation",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.ActivationFile",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.ActivationOS",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.ActivationProperty",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Build",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.BuildBase",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.CiManagement",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.ConfigurationContainer",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Contributor",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Dependency",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.DependencyManagement",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.DeploymentRepository",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Developer",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.DistributionManagement",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Exclusion",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Extension",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.FileSet",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.InputLocation",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.InputLocationTracker",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.InputSource",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.IssueManagement",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.License",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.MailingList",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Model",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.ModelBase",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Notifier",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Organization",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Parent",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.PatternSet",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Plugin",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.PluginConfiguration",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.PluginContainer",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.PluginExecution",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.PluginManagement",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Prerequisites",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Profile",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Relocation",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.ReportPlugin",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.ReportSet",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Reporting",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Repository",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.RepositoryBase",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.RepositoryPolicy",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Resource",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Scm",
+      "allPublicMethods": true
+    },
+    {
+      "type": "org.apache.maven.model.Site",
+      "allPublicMethods": true
+    }
+  ],
+  "resources": [
+    {
+      "glob": "META-INF/services/javax.xml.stream.XMLInputFactory"
+    },
+    {
+      "glob": "META-INF/services/org.slf4j.spi.SLF4JServiceProvider"
+    },
+    {
+      "glob": "org/apache/maven/model/pom-4.0.0.xml"
+    }
+  ]
+}

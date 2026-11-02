@@ -15,7 +15,7 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec03"></a>[EC03](EC03-The-Maven-Plugin-Behind-The-Contract.md) | - | the contract in Porelo and [EC02](README.md#ec02) | The Maven plugin as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs. |
+| <a id="ec03"></a>[EC03](EC03-The-Maven-Plugin-Behind-The-Contract.md) | M | [EC02](README.md#ec02) | The Maven plugin as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs. |
 | <a id="ec04"></a>[EC04](EC04-The-Gradle-Plugin.md) | - | the contract in Porelo | A checkout built with Gradle gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network, every value with its file and line. |
 | <a id="ec05"></a>[EC05](EC05-The-npm-Plugin.md) | - | the contract in Porelo | A checkout built with npm gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network, every value with its file and line. |
 | <a id="ec06"></a>[EC06](EC06-The-pip-Plugin.md) | - | the contract in Porelo | A checkout built with pip gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network, every value with its file and line. |

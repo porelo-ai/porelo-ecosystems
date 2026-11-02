@@ -3,6 +3,9 @@ package org.fuin.porelo.ecosystem.maven;
 import java.io.IOException;
 import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.maven.model.InputLocation;
 import org.apache.maven.model.InputSource;
 import org.jspecify.annotations.Nullable;
@@ -11,12 +14,12 @@ import org.jspecify.annotations.Nullable;
 final class Places {
     private final Path checkout;
     private final Path home;
-    private final Path settings;
+    private final Set<Path> yours;
 
-    Places(Path checkout, Path home, Path settings) {
+    Places(Path checkout, Path home, Path... settings) {
         this.checkout = realOrNormal(checkout);
         this.home = realOrNormal(home);
-        this.settings = realOrNormal(settings);
+        this.yours = Stream.of(settings).map(Places::realOrNormal).collect(Collectors.toSet());
     }
 
     Path checkout() {
@@ -41,13 +44,13 @@ final class Places {
 
     Place of(Path file, int line) {
         Path real = realOrNormal(file);
-        // First: settings standing in the checkout are written by whoever can push.
+        // First: settings standing in the checkout are the checkout's, wherever it lies.
         if (real.startsWith(checkout)) {
             String inCheckout = checkout.relativize(real).toString();
             return new Place(inCheckout, line, Origin.CHECKOUT);
         }
         Origin origin =
-                real.equals(settings) && real.startsWith(home) ? Origin.YOURS : Origin.MACHINE;
+                yours.contains(real) && real.startsWith(home) ? Origin.YOURS : Origin.MACHINE;
         return new Place(relativeToHome(real), line, origin);
     }
 

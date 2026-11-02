@@ -289,6 +289,70 @@ final class MergeFixtures {
                 .pom("pom.xml", project("child", REPO_FROM_A_PROPERTY));
     }
 
+    static void globalSettingsWithAProfileAndAMirror(Fixture f) throws IOException {
+        f.pom(".mvn/maven.config", "-gs\nci/global.xml\n")
+                .pom(
+                        "ci/global.xml",
+                        """
+                        <settings><profiles><profile>
+                          <id>g</id>
+                          <activation><activeByDefault>true</activeByDefault></activation>
+                          <repositories><repository>
+                            <id>from-global</id><url>https://global.example.org/m</url>
+                          </repository></repositories>
+                        </profile></profiles></settings>
+                        """)
+                .pom("pom.xml", project("child", ""));
+    }
+
+    static void anActiveIdNamingAGlobalProfile(Fixture f) throws IOException {
+        f.pom(".mvn/maven.config", "-gs\nci/global.xml\n")
+                .pom(
+                        "ci/global.xml",
+                        """
+                        <settings><profiles><profile>
+                          <id>g</id>
+                          <repositories><repository>
+                            <id>from-global</id><url>https://global.example.org/m</url>
+                          </repository></repositories>
+                        </profile></profiles></settings>
+                        """)
+                .settings(
+                        "<settings><activeProfiles><activeProfile>g</activeProfile></activeProfiles></settings>")
+                .pom("pom.xml", project("child", ""));
+    }
+
+    static void theUsersProfileOverAGlobalOneOfItsId(Fixture f) throws IOException {
+        String profile =
+                """
+                <settings><profiles><profile>
+                  <id>g</id>
+                  <activation><activeByDefault>true</activeByDefault></activation>
+                  <repositories><repository>
+                    <id>%s</id><url>https://%s.example.org/m</url>
+                  </repository></repositories>
+                </profile></profiles></settings>
+                """;
+        f.pom(".mvn/maven.config", "-gs\nci/global.xml\n")
+                .pom("ci/global.xml", profile.formatted("global", "global"))
+                .settings(profile.formatted("user", "user"))
+                .pom("pom.xml", project("child", ""));
+    }
+
+    /** Asks for the repository under the name the task's settings declare it. */
+    static void aRepositoryOfTheFileConfigureWrites(Fixture f) throws IOException {
+        f.settings(
+                        MavenSettingsFile.of(
+                                        java.util.List.of(
+                                                new org.fuin.porelo.ecosystem.api.Repository(
+                                                        "corp", "http://127.0.0.1:9420/corp/")))
+                                .get(0)
+                                .content())
+                .pom(
+                        "pom.xml",
+                        project("child", repository("corp", "https://nexus.example.org/m")));
+    }
+
     static void twoPropertiesOnOneLineOfMavenConfig(Fixture f) throws IOException {
         f.pom(".mvn/maven.config", "-Dz=1 -Drepo.host=config.example.org\n")
                 .pom("pom.xml", project("child", REPO_FROM_A_PROPERTY));

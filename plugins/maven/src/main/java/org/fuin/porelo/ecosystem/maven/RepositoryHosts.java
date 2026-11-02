@@ -2,8 +2,10 @@ package org.fuin.porelo.ecosystem.maven;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -13,6 +15,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -47,6 +50,9 @@ import org.jspecify.annotations.Nullable;
  */
 public final class RepositoryHosts {
     private static final String ENV_PREFIX = "env.";
+    private static final Pattern WRAPPER_DISTRIBUTION =
+            Pattern.compile(
+                    "(?m)^distributionUrl=.*/(apache-maven-[^/\\s]+?)\\.(?:zip|tar\\.gz)\\s*$");
     private static final String EXTENSIONS = ".mvn/extensions.xml";
     private static final Pattern EXPRESSION = Pattern.compile("\\$\\{([^}]+)}");
     private static final String EXTENSION_LOADED =
@@ -55,7 +61,7 @@ public final class RepositoryHosts {
 
     private final Places places;
     private final UserSettings settings;
-    private final Place settingsPlace;
+    private final BiConsumer<Model, Places> reader;
     private final Path settingsFile;
     private final Mirrors mirrors;
     private final List<Path> localRoots;
@@ -68,16 +74,16 @@ public final class RepositoryHosts {
     private final MachineCondition machineCondition;
 
     private RepositoryHosts(
-            Path checkout,
-            Path home,
+            Places places,
             Path settingsFile,
             UserSettings settings,
             List<Path> roots,
-            MavenOptions options) {
-        this.places = new Places(checkout, home, settingsFile);
+            MavenOptions options,
+            BiConsumer<Model, Places> reader) {
+        this.places = places;
+        this.reader = reader;
         this.settings = settings;
         this.settingsFile = settingsFile;
-        this.settingsPlace = places.of(settingsFile, 0);
         this.mirrors = new Mirrors(settings.mirrors());
         this.localRoots = roots;
         this.options = options;
@@ -97,6 +103,12 @@ public final class RepositoryHosts {
      * @throws NotAMavenCheckoutException when the checkout holds no {@code pom.xml}
      */
     public static RepositoryHostsAnswer read(Path checkout, Path home) throws IOException {
+        return read(checkout, home, (model, places) -> {});
+    }
+
+    /** Reads a checkout, handing each pom's effective model to what else needs it. */
+    static RepositoryHostsAnswer read(Path checkout, Path home, BiConsumer<Model, Places> reader)
+            throws IOException {
         Path absoluteHome = home.toAbsolutePath();
         Path absoluteCheckout = checkout.toAbsolutePath();
         MavenOptions options = MavenOptions.read(absoluteCheckout);
@@ -105,18 +117,58 @@ public final class RepositoryHosts {
                 named == null
                         ? absoluteHome.resolve(".m2").resolve("settings.xml")
                         : absoluteCheckout.resolve(named);
-        UserSettings settings = SettingsReader.read(settingsFile, options);
+        String namedGlobal = options.globalSettings();
+        Places places =
+                namedGlobal == null
+                        ? new Places(absoluteCheckout, absoluteHome, settingsFile)
+                        : new Places(
+                                absoluteCheckout,
+                                absoluteHome,
+                                settingsFile,
+                                absoluteCheckout.resolve(namedGlobal));
+        Path globalFile =
+                namedGlobal != null
+                        ? absoluteCheckout.resolve(namedGlobal)
+                        : wrapperSettings(absoluteCheckout, absoluteHome);
+        UserSettings global =
+                globalFile == null
+                        ? UserSettings.NONE
+                        : SettingsReader.read(globalFile, options, places);
+        UserSettings settings = SettingsReader.read(settingsFile, options, places).over(global);
         String localRepository = options.property("maven.repo.local");
         List<Path> roots =
                 localRoots(
                         localRepository != null ? localRepository : settings.localRepository(),
                         absoluteHome);
-        return new RepositoryHosts(
-                        absoluteCheckout, absoluteHome, settingsFile, settings, roots, options)
-                .answer();
+        return new RepositoryHosts(places, settingsFile, settings, roots, options, reader)
+                .answer(globalFile);
     }
 
-    private RepositoryHostsAnswer answer() {
+    // The installation the wrapper unpacked, as the only one a home holds for a build to use.
+    private static @Nullable Path wrapperSettings(Path checkout, Path home) throws IOException {
+        Path properties = checkout.resolve(".mvn/wrapper/maven-wrapper.properties");
+        if (!Files.isRegularFile(properties)) {
+            return null;
+        }
+        Matcher name =
+                WRAPPER_DISTRIBUTION.matcher(Files.readString(properties, StandardCharsets.UTF_8));
+        if (!name.find()) {
+            return null;
+        }
+        Path unpacked = home.resolve(".m2/wrapper/dists").resolve(name.group(1));
+        if (!Files.isDirectory(unpacked)) {
+            return null;
+        }
+        try (Stream<Path> files = Files.find(unpacked, 4, RepositoryHosts::isConfSettings)) {
+            return files.sorted().findFirst().orElse(null);
+        }
+    }
+
+    private static boolean isConfSettings(Path file, BasicFileAttributes attributes) {
+        return attributes.isRegularFile() && file.endsWith("conf/settings.xml");
+    }
+
+    private RepositoryHostsAnswer answer(@Nullable Path globalFile) {
         Path checkout = places.checkout();
         Path rootPom = checkout.resolve("pom.xml");
         if (!Files.isRegularFile(rootPom)) {
@@ -131,6 +183,16 @@ public final class RepositoryHosts {
                                     + " stops on that",
                             options.settingsPlace()));
         }
+        if (options.globalSettings() != null
+                && (globalFile == null || !Files.isRegularFile(globalFile))) {
+            unknowns.add(
+                    new UnknownValue(
+                            options.globalSettings(),
+                            "these global settings are named for the build and are not there, and"
+                                    + " Maven stops on that",
+                            options.globalSettingsPlace()));
+        }
+        settings.proxies().forEach(this::answerProxy);
         if (Files.exists(checkout.resolve(EXTENSIONS))) {
             unplaced.add(
                     new Unplaced(
@@ -145,10 +207,7 @@ public final class RepositoryHosts {
                                         new UnknownValue(
                                                 unreadValue.what(),
                                                 unreadValue.why(),
-                                                new Place(
-                                                        settingsPlace.file(),
-                                                        unreadValue.line(),
-                                                        settingsPlace.origin()))));
+                                                unreadValue.place())));
         settings.unknowns()
                 .forEach(
                         condition ->
@@ -158,10 +217,7 @@ public final class RepositoryHosts {
                                                 "active only under a condition on "
                                                         + condition.condition()
                                                         + ", which depends on where the build runs",
-                                                new Place(
-                                                        settingsPlace.file(),
-                                                        condition.line(),
-                                                        settingsPlace.origin()))));
+                                                condition.place())));
         Deque<Path> poms = new ArrayDeque<>(List.of(rootPom));
         Set<Path> seen = new HashSet<>();
         while (!poms.isEmpty()) {
@@ -228,12 +284,16 @@ public final class RepositoryHosts {
             ModelBuildingResult result = builder.build(request(pom));
             takeRefusals();
             answerModel(result, pom);
+            reader.accept(result.getEffectiveModel(), places);
             return modulesOf(result.getEffectiveModel(), pom);
         } catch (ModelBuildingException e) {
             answerFailure(e, pom);
             return List.of();
         } catch (OutOfMemoryError | StackOverflowError e) {
             return refused(pom, "filling in its properties grew beyond what can be held");
+        } catch (Error e) {
+            // A native image holds no part of the model it was not told of, and says so this way.
+            return refused(pom, "it reaches a part of Maven's model this executable does not hold");
         } catch (RuntimeException e) {
             // The builder gives up on a broken pom in ways of its own, and one pom must not end
             // the answer for the rest. Its message is not repeated: it can name anything.
@@ -384,7 +444,7 @@ public final class RepositoryHosts {
     }
 
     private void answerMirror(UserSettings.Mirror mirror) {
-        Place place = new Place(settingsPlace.file(), mirror.line(), settingsPlace.origin());
+        Place place = mirror.place();
         String id = mirror.id();
         if (mirror.blocked()) {
             unknowns.add(
@@ -409,6 +469,27 @@ public final class RepositoryHosts {
                                                 RepositoryHost.Kind.MIRROR,
                                                 place,
                                                 server(id, place))));
+    }
+
+    private void answerProxy(UserSettings.Proxy proxy) {
+        String url = proxy.protocol() + "://" + proxy.host() + ":" + proxy.port();
+        if (holdsExpression(url, proxy.place(), proxy.id())) {
+            return;
+        }
+        hostUrl(url, proxy.id(), proxy.place())
+                .ifPresent(
+                        host ->
+                                hosts.add(
+                                        new RepositoryHost(
+                                                proxy.id(),
+                                                host.host(),
+                                                host.url(),
+                                                RepositoryHost.Kind.PROXY,
+                                                proxy.place(),
+                                                new ServerReference(
+                                                        proxy.id(),
+                                                        proxy.authenticated(),
+                                                        proxy.place()))));
     }
 
     private boolean holdsExpression(String url, Place place, String id) {
@@ -450,11 +531,10 @@ public final class RepositoryHosts {
     }
 
     private ServerReference server(String id, Place repositoryPlace) {
-        Integer line = settings.servers().get(id);
-        return line == null
+        Place place = settings.servers().get(id);
+        return place == null
                 ? new ServerReference(id, false, repositoryPlace)
-                : new ServerReference(
-                        id, true, new Place(settingsPlace.file(), line, settingsPlace.origin()));
+                : new ServerReference(id, true, place);
     }
 
     private void answerConditionalProfiles(ModelBuildingResult result, String modelId) {
