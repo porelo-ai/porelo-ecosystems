@@ -14,7 +14,7 @@
     </parent>
 
     <groupId>org.fuin.porelo</groupId>
-    <artifactId>porelo-ecosystems</artifactId>
+    <artifactId>porelo-ecosystems-root</artifactId>
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Porelo Ecosystems</name>
@@ -84,14 +84,6 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
-
-            <plugin>
-                <groupId>org.codehaus.mojo</groupId>
-                <artifactId>flatten-maven-plugin</artifactId>
-                <configuration>
-                    <outputDirectory>${project.build.directory}</outputDirectory>
-                </configuration>
             </plugin>
 
             <!-- The shared code style, from porelo-parent: google-java-format (AOSP) and shfmt, checked in validate;

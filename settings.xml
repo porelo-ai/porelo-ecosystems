@@ -6,20 +6,6 @@
     <!-- Used by CI. A developer's own ~/.m2/settings.xml is not consulted when the build passes
          "-s settings.xml", so anything a build needs has to be here. -->
 
-    <servers>
-
-        <!-- The id the central-publishing-maven-plugin looks for, set in org.fuin:pom's
-             central-sonatype-release profile. Values come from the environment; nothing
-             secret is in this file. -->
-
-        <server>
-            <id>central-sonatype</id>
-            <username>${env.OSS_SONATYPE_USERNAME}</username>
-            <password>${env.OSS_SONATYPE_TOKEN}</password>
-        </server>
-
-    </servers>
-
     <profiles>
 
         <profile>

@@ -490,7 +490,7 @@ no build tool. What a plugin answers becomes a tools draft and a rules draft for
   who can push wrote. A credential is named by its id only, and its value appears nowhere.
 - **Porelo's contract comes from Core**, in `porelo`'s `ecosystems/api`. Logic that does not need it, such as what a pom
   and the person's settings say about repository hosts, is built and tested without it.
-- **Under `GPL-3.0-or-later`**, published to Maven Central under `org.fuin.porelo`, all modules in one release.
+- **Under `GPL-3.0-or-later`, and nothing goes to Maven Central.** A plugin is a native executable in a package of its own, found at run time over the contract; nothing builds against an artifact here.
 
 ## Work in this repository
 
