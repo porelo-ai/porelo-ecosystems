@@ -5,6 +5,10 @@
 
 **What must be true.** Given a checkout and the person's Maven settings, the Maven module answers which repository hosts a build must reach, each with its file and line and whose it is: the person's own settings, the checkout's, which anybody who can push wrote, or the machine's. Parents are merged and properties filled in as Maven does, across every level. It needs nothing of Porelo's contract and is tested without it.
 
+## The decision that changes this issue
+
+A plugin [has nothing to secure](../doc/decisions.md#a-plugin-has-nothing-to-secure): the aim is the hosts the developer's real build would reach, each with its file and line, and no hostile checkout is hardened against. `.mvn/maven.config` is evaluated as the build evaluates it, `-D`, `-P` and `-s` applied, and what cannot be followed stays an unknown naming it. The global settings and the proxies go in with [EC03](README.md#ec03). No further reading is held for security. The plan and the lists below describe the code as it stands, until what falls away has been removed.
+
 ## Plan
 
 Built on `maven-model-builder` alone in `plugins/maven`, package `org.fuin.porelo.ecosystem.maven`. Red first: a repository URL built from a property across three levels, against what real Maven answers.
