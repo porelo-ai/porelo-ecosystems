@@ -19,7 +19,7 @@ A program of its own on a branch, never merged, that reads a given checkout and 
 
 ## The answer
 
-**MIMA serves as a native image, and the bare model builder serves better.** Proposed: build on `org.apache.maven:maven-model-builder` alone, with a resolver that reads only the local repository, instead of MIMA. Both run Maven's own model builder, so parents, properties, profiles and imported BOMs merge the same way; what MIMA adds is what this repository's rules forbid or do not need. Leaving MIMA changes the design this issue was planned from, so it stands as a proposal until the operator decides.
+**MIMA serves as a native image, and the bare model builder serves better, so the Maven plugin builds on `org.apache.maven:maven-model-builder` alone**, with a resolver that reads only the local repository. Both run Maven's own model builder, so parents, properties, profiles and imported BOMs merge the same way; what MIMA adds is what this repository's rules forbid or do not need.
 
 Measured with MIMA 3.0.1 (Maven 3.10.0, resolver 2.0.24), `maven-model-builder` 3.10.0 and GraalVM 25.4.4.1.1, `-march=x86-64`, on fixtures and on two Porelo repositories. The program is on the local branch `spike/mima-native`.
 
@@ -62,9 +62,9 @@ The local-only resolver is about 25 lines. It must also find the local repositor
 
 ### What it means for what follows
 
-- [EC02](README.md#ec02) builds on the bare model builder if the proposal is taken: its Plan keeps its steps, gains the settings reader, the resolver and the check of a value's file, and stays M. If MIMA is kept, the same steps less the resolver.
+- [EC02](README.md#ec02) builds on the bare model builder: its Plan gains the settings reader, the resolver and the check of a value's file.
 - [EC03](README.md#ec03) takes the metadata above and the refusal of a reflection `Error`.
-- A value can come from neither the person nor the checkout: a parent in the local repository, or the super POM. A checkout with `.mvn/extensions.xml` needs a way to say its model is not trusted.
+- A value can come from neither the person nor the checkout: a parent in the local repository, or the super POM; the contract's `MACHINE` says so. A checkout with `.mvn/extensions.xml` is reported as an unplaced finding naming the file.
 
 ## Acceptance
 
