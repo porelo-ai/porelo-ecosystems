@@ -1,14 +1,14 @@
 # EC09 — A Project's Tools Installed In The Exact Version
 
 **Status:** Idea.
-**Size:** M here, by the spike below: the online step, the new answer and their tests; the stage that uses it is the image builder's.
+**Size:** M - the online step, its answer as lines and values, their tests; it changes a contract, and the image builder needs no new stage.
 
 **What must be true.** What a project asks is installed in the exact version: the JDK, Maven and any other recognized tool, so that a distribution's packages no longer decide it and a pom asking Maven 3.9 no longer meets 3.8.7.
 
-- A build stage fetches each tool by URL and digest, with no tool manager, and the final image holds only the artifact and its paths.
+- Ordinary `image.snippet` lines fetch each tool by URL and digest, with no tool manager, and the image holds only the artifact; `image.env` and links on the path do the rest.
 - When `project.yml` is made, the newest stable version of what the project asks is found: the newest 25 for Java 25, the newest stable Maven in the pom's range, GraalVM likewise. Pre-releases never count. Offline or on a vendor's failure, the draft says unknown and names what was asked.
 - `project.yml` holds the download URL and digest of the version found when the file is made, and the image's build checks it. From then on it is the person's: the plugin only bootstraps.
-- The paths are set correctly: `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`, `MAVEN_HOME`, `PATH`, and for GraalVM `GRAALVM_HOME`.
+- The paths are set correctly: `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`, `MAVEN_HOME`, the tools on the path, and for GraalVM `GRAALVM_HOME`.
 - `native-maven-plugin` is recognized and brings GraalVM with `native-image` and every library it needs, so such a build works without a hand-written snippet.
 - `mvnw` keeps priority for Maven.
 
@@ -22,6 +22,7 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 | The manager is absent from the final image | Green: no `sdk`, no file named `*sdkman*`, no variable. |
 | Paths for user `agent`, in `bash -c` and `sh -c`, with `ENV` alone | Green: `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`, `MAVEN_HOME`, `GRAALVM_HOME`, `PATH`. |
 | The same stage from vendor URLs and digests, no SDKMAN | Green: 72 s, 1.16 GB, same versions. A wrong digest stops the build (`FAILED`, exit 1). |
+| Plain lines in the image, no build stage, with today's newest: Temurin 25.0.5, Maven 3.10.0, GraalVM CE 25.0.5.0.3; `env` as Porelo sets it, links in `/usr/local/bin` | Green: 79 s, 1.37 GB with the native packages, all commands for `agent` in `bash -c` and `sh -c`; Hello World and a native build run. |
 | Hello World in the box, only `repo.maven.apache.org` through a proxy | Green: 21 s, on the final image with no package added. A direct connection is refused. |
 | Native build on that final image | Red, as expected: `'gcc' not found`. |
 | Native build with `gcc`, `libc6-dev`, `zlib1g-dev` | Green: 1m34s with `JAVA_HOME` on Temurin and `GRAALVM_HOME` set, 1m07s with `JAVA_HOME` on GraalVM. The executable runs. The proxy saw no host but Maven's. |
@@ -48,7 +49,7 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 
 ## Plan
 
-**A fetch by URL and digest, no SDKMAN.** The same small stage serves every tool and plugin, reaches what SDKMAN cannot, adds no host of its own, and checks what SDKMAN leaves unchecked.
+**A fetch by URL and digest, no SDKMAN, in ordinary lines.** The same small `RUN` serves every tool and plugin, needs no new field and no stage in the image builder, reads as what it does, and the person can change it. It reaches what SDKMAN cannot, adds no host of its own, and checks what SDKMAN leaves unchecked.
 
 **The online step, a call of its own in the contract.** Reading stays as it is: `detect` needs no network and answers what is asked. A new `resolve` takes those asks and asks the vendors once, when the file is made, and Porelo shows it in the draft as its own step, naming each host. It is the one place in the plugin with an HTTP client.
 
@@ -64,25 +65,22 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 
 **The digest comes from the same source as the archive.** It catches a broken or changed download from then on, and of the first sight proves no more than the TLS connection it was read over.
 
-**The answer.** `detect` keeps `java.version` and `maven.version` as what was asked. `resolve` answers a list, since one string does not hold it:
+**The answer.** `detect` keeps `java.version` and `maven.version` as what was asked. `resolve` answers ordinary findings under two more kinds of key, which Porelo places by their prefix alone, so it names no build tool: `snippet.<name>`, whose value is the lines, and `env.<NAME>`, whose value is the variable's. Two plugins giving one key two values are a disagreement, as today.
 
-    tools: [{name, version, url, digest, strip, env: {NAME: relative path}, path: [relative paths],
-             file, line, origin, note}]
+For Maven: `snippet.java`, `snippet.maven` unless a wrapper fetches it, and with `native-maven-plugin` `snippet.graalvm`; `env.JAVA_HOME`, `env.JDK_HOME`, `env.JRE_HOME`, `env.MAVEN_HOME`, `env.GRAALVM_HOME`. `package.openjdk-*`, `package.default-jdk-headless` and `package.maven` go; `package.gcc`, `package.zlib1g-dev` and a new `package.libc6-dev` stay.
 
-For Maven: `java` (`env` `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`; `path` `bin`), `maven` unless a wrapper fetches it (`MAVEN_HOME`), and with `native-maven-plugin` `graalvm` (`GRAALVM_HOME`). `package.openjdk-*`, `package.default-jdk-headless` and `package.maven` go; `package.gcc`, `package.zlib1g-dev` and a new `package.libc6-dev` stay.
+**What `project.yml` then holds**, under `image:`, written once and then the person's:
 
-**The form in `project.yml`**, under `image:`, with the digest naming its algorithm, as Maven publishes sha512 and the others sha256:
+    snippet: |
+      RUN set -eu; mkdir -p /opt/java; curl -fsSL -o /tmp/java.tgz '<url>'; echo '<digest>  /tmp/java.tgz' | sha256sum -c -; tar xzf /tmp/java.tgz -C /opt/java --strip-components=1; rm /tmp/java.tgz; ln -s /opt/java/bin/* /usr/local/bin/
+    env:
+      JAVA_HOME: /opt/java
 
-    tools:
-      - name: java
-        version: 25.0.5+8
-        url: https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5%2B8/OpenJDK25U-jdk_x64_linux_hotspot_25.0.5_8.tar.gz
-        digest: sha256:<as found>
-        strip: 1
-        env: {JAVA_HOME: ., JDK_HOME: ., JRE_HOME: .}
-        path: [bin]
+**`PATH` cannot be set this way:** `image.env` refuses it, as Porelo sets it in every task. So each tool's commands are linked into `/usr/local/bin`, which stands on that path. From a second tool holding the same names, such as GraalVM's `java`, only what it adds is linked.
 
-Porelo reads `name` as a label, so it names no build tool: its stage fetches, checks, unpacks under one directory, and sets what is written.
+**What a vendor answered goes into lines a build runs as root**, so `resolve` writes a URL, version and digest only when each holds what it should: `https`, a known host, a plain character set, a hex digest. Anything else is an unknown.
+
+**Each line assumes `curl`, which Porelo's image holds, and `tar` and `sha256sum` on a glibc base.** A `base_image` without them fails loudly at that line, and the person sees why.
 
 **What the image's build reaches**, differing from the step's hosts: `github.com` and its redirect `release-assets.githubusercontent.com`, and `repo.maven.apache.org`.
 
@@ -90,11 +88,12 @@ Porelo reads `name` as a label, so it names no build tool: its stage fetches, ch
 
 **Fit of the other plugins, by reading.** Gradle fits: its wrapper already names a digest, and the JDK is the same row. npm fits with Node's archive. pip fits with a standalone Python build, whose digest is still to be read. Flutter fits for its SDK, while its Android SDK and the packages a native wheel or `node-gyp` needs stay `package.<name>` or unknown.
 
-**A native build's JDK.** Both ways were green; GraalVM alone would be one tool less where its major equals the release, while a project whose JDK and GraalVM differ needs both. The plugin answers both.
+**A native build's JDK.** Both ways were green; GraalVM alone would be one tool less where its major equals the release, while a project whose JDK and GraalVM differ needs both. Each answers its own lines.
 
 ## To be checked
 
-- That the image builder's stage takes this form, and whether a task's user keeps `ENV`, through a real task.
+- That these lines and `env` work through a real task and the image builder, as they ran under plain `podman` only.
+- How a draft orders the lines, and that a snippet taken whole from another source replaces them, as the file's order of sources says.
 - The size the HTTP client adds to the executable.
 - That GraalVM's asset names read the same for its next releases, and the Python builds' digests.
 - The first run's times through the real step: only single requests were timed.
