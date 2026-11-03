@@ -32,7 +32,7 @@
 - **The keys are this plugin's, until Porelo's merge names them:** it is not built yet, and may ask for others.
 - **Which Maven's global settings count:** the plugin starts with an empty environment and knows no installation but the wrapper's; a Maven installed elsewhere, such as `/etc/maven/settings.xml`, is not read, and the build in its box has its own anyway.
 - **Proxies are not compared with real Maven:** `help:effective-pom` does not show them.
-- **The package is a `.deb` only**; an `.rpm` and a place to publish them are not built.
+- **The package is a `.deb` only**, and nothing publishes it; [EC08](README.md#ec08) does both.
 - **The table of packages** names Debian's packages, and what a plugin runs beyond it stays unseen.
-- **The JDK and Maven packages are Ubuntu 24.04's:** a project's other `base_image` may lack one or hold another, and Ubuntu's Maven there is 3.8.7, which a pom's enforcer rule may refuse; the note says what was asked.
+- **The JDK and Maven packages are Ubuntu 24.04's:** a project's other `base_image` may lack one or hold another, and Ubuntu's Maven there is 3.8.7, which a pom's enforcer rule may refuse, and whose default compiler plugin can refuse the JDK where a pom pins none; the note says each.
 - **`native-maven-plugin` needs GraalVM's `native-image`,** which no package named here holds, so such a build gets its `gcc` and `zlib1g-dev` and still fails in the image until the person's `snippet` brings it.

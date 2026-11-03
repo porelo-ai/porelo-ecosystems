@@ -20,6 +20,12 @@ out.
 | <a id="ec06"></a>[EC06](EC06-The-pip-Plugin.md) | - | the contract in Porelo | A checkout built with pip gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network, every value with its file and line. |
 | <a id="ec07"></a>[EC07](EC07-The-Flutter-Plugin.md) | - | the contract in Porelo | A checkout built with Flutter gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network, every value with its file and line. |
 
+## Idea
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec08"></a>[EC08](EC08-The-Maven-Plugin-Published-As-A-Recommended-Package.md) | M | - | The Maven plugin published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
+
 ## Finished
 
 | # | Size | Blocked by | What it covers |
