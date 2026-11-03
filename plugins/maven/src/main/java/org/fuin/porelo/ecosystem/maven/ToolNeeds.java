@@ -61,6 +61,7 @@ final class ToolNeeds {
     private @Nullable Finding javaUnknown;
     private @Nullable Finding maven;
     private boolean wrapperRuns;
+    private boolean compilerUnpinned;
     private @Nullable Finding testMemory;
     private long highestTestMemory;
     private final Map<String, Finding> packages = new LinkedHashMap<>();
@@ -75,6 +76,7 @@ final class ToolNeeds {
 
     /** Takes in one pom's effective model. */
     void read(Model model, Places places) {
+        compilerUnpinned |= !pinsTheCompiler(model);
         readJava(model, places);
         readMaven(model, places);
         readPackages(model, places);
@@ -133,7 +135,12 @@ final class ToolNeeds {
                                             ? ""
                                             : ", which may not be the "
                                                     + mavenAsked.value()
-                                                    + " asked for")));
+                                                    + " asked for")
+                                    + (compilerUnpinned
+                                            ? "; a pom pins no maven-compiler-plugin, so that"
+                                                    + " Maven's default compiles, and an old one"
+                                                    + " can refuse the JDK"
+                                            : "")));
         }
         all.addAll(packages.values());
         all.addAll(fromFiles);
@@ -456,6 +463,19 @@ final class ToolNeeds {
                 .filter(Xpp3Dom.class::isInstance)
                 .map(Xpp3Dom.class::cast)
                 .toList();
+    }
+
+    private static boolean pinsTheCompiler(Model model) {
+        Build build = model.getBuild();
+        if (build == null) {
+            return false;
+        }
+        Stream<Plugin> managed =
+                build.getPluginManagement() == null
+                        ? Stream.empty()
+                        : build.getPluginManagement().getPlugins().stream();
+        return Stream.concat(used(model).stream(), managed)
+                .anyMatch(p -> p.getKey().equals(COMPILER) && p.getVersion() != null);
     }
 
     private static List<Plugin> used(Model model) {
