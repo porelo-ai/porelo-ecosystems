@@ -485,8 +485,14 @@ no build tool. What a plugin answers becomes a tools draft and a rules draft for
 - **A plugin has nothing to secure.** It runs on the machine where the developer starts Porelo, and aims at the right
   answer: the hosts the real build would reach. What the build reads is input to the answer; no hostile checkout is
   hardened against, and a finding against a plugin is a wrong answer, never a security finding.
-- **A plugin reaches no network.** What the build would fetch is read from the person's local caches only; a value that
-  sits in something not found there is named as unknown, with where it is set, never guessed.
+- **A plugin reaches no network while it reads a checkout or the person's settings.** What the build would fetch is read
+  from the person's local caches only; a value that sits in something not found there is named as unknown, with where it
+  is set, never guessed.
+- **The one online step is when `project.yml` is made:** a plugin asks the vendors' sources once for the newest stable
+  version of what the project asks, visibly in the draft; offline or on a vendor's failure, the draft says unknown and
+  names what was asked.
+- **A plugin only bootstraps.** Once `project.yml` exists, what stands in it is the person's, and a plugin does not read
+  it against anything.
 - **A broken or huge file gets an answer, not a crash**: limits on size, XML without DTDs or fetching.
 - **Every value names its file and line, and where that stands**: the person's own files, the checkout, or the machine.
   A credential is named by its id only, and its value appears nowhere.
