@@ -25,7 +25,7 @@ out.
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
 | <a id="ec08"></a>[EC08](EC08-The-Maven-Plugin-Published-As-A-Recommended-Package.md) | M | - | The Maven plugin published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
-| <a id="ec09"></a>[EC09](EC09-A-Projects-Tools-Installed-In-The-Exact-Version.md) | - | - | What a project asks is installed in the exact version, by a build stage whose tool manager stays out of the final image, with its paths set and GraalVM brought for a native build. |
+| <a id="ec09"></a>[EC09](EC09-A-Projects-Tools-Installed-In-The-Exact-Version.md) | M | - | What a project asks is installed in the exact version, by a build stage whose tool manager stays out of the final image, with its paths set and GraalVM brought for a native build. |
 
 ## Finished
 
