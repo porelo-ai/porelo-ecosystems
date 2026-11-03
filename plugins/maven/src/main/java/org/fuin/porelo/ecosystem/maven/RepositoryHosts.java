@@ -67,6 +67,7 @@ public final class RepositoryHosts {
     private final List<Path> localRoots;
     private final Set<RepositoryHost> hosts = new LinkedHashSet<>();
     private final Set<UnknownValue> unknowns = new LinkedHashSet<>();
+    private boolean everyPomRead = true;
     private final Set<Unplaced> unplaced = new LinkedHashSet<>();
     private final PomGuard guard;
     private final DefaultModelBuilder builder;
@@ -228,7 +229,7 @@ public final class RepositoryHosts {
             }
         }
         return new RepositoryHostsAnswer(
-                List.copyOf(hosts), List.copyOf(unknowns), List.copyOf(unplaced));
+                List.copyOf(hosts), List.copyOf(unknowns), List.copyOf(unplaced), everyPomRead);
     }
 
     // In the effective model, so a plugin managed elsewhere counts only once a build uses it.
@@ -273,6 +274,7 @@ public final class RepositoryHosts {
 
     private List<Path> readPom(Path pom) {
         if (!Files.isRegularFile(pom)) {
+            everyPomRead = false;
             unknowns.add(
                     new UnknownValue(
                             pom.getFileName().toString(),
@@ -302,6 +304,7 @@ public final class RepositoryHosts {
     }
 
     private List<Path> refused(Path pom, String why) {
+        everyPomRead = false;
         Place place = places.of(pom, 0);
         unknowns.add(new UnknownValue(place.file(), "refused: " + why, place));
         return List.of();
@@ -326,11 +329,18 @@ public final class RepositoryHosts {
         active.addAll(options.activeProfiles());
         request.setActiveProfileIds(active);
         request.setInactiveProfileIds(options.inactiveProfiles());
-        request.setModelResolver(new LocalRepositoryResolver(localRoots, places, unknowns::add));
+        request.setModelResolver(
+                new LocalRepositoryResolver(localRoots, places, this::parentUnread));
         return request;
     }
 
+    private void parentUnread(UnknownValue parent) {
+        everyPomRead = false;
+        unknowns.add(parent);
+    }
+
     private void answerFailure(ModelBuildingException failure, Path pom) {
+        everyPomRead = false;
         List<UnknownValue> refusals = guard.takeRefusals();
         if (!refusals.isEmpty()) {
             unknowns.addAll(refusals);

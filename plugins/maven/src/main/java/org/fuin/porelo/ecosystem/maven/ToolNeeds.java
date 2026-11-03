@@ -81,14 +81,25 @@ final class ToolNeeds {
         readTestMemory(model, places);
     }
 
-    /** What was found, with Maven's version always named: a pom means a Maven. */
-    List<Finding> findings() {
+    /**
+     * What was found, with Maven's version always named: a pom means a Maven.
+     *
+     * @param everyPomRead false when what asks for a version may stand in a pom that went unread
+     */
+    List<Finding> findings(boolean everyPomRead) {
         List<Finding> all = new ArrayList<>();
         if (java != null) {
             all.add(java);
             all.add(jdkPackage(java));
         } else if (javaUnknown != null) {
             all.add(javaUnknown);
+        } else if (!everyPomRead) {
+            all.add(
+                    Answers.unknown(
+                            Finding.Part.TOOLS,
+                            "java.version",
+                            NOTHING_ASKED,
+                            "no pom read asks for a Java release, and one that went unread may"));
         } else {
             all.add(
                     Answers.tool(
@@ -104,7 +115,10 @@ final class ToolNeeds {
                                 "maven.version",
                                 "",
                                 NOTHING_ASKED,
-                                "no version is asked for, so any Maven serves");
+                                everyPomRead
+                                        ? "no version is asked for, so any Maven serves"
+                                        : "no pom read asks for a version, and one that went"
+                                                + " unread may");
         all.add(mavenAsked);
         if (wrapperRuns) {
             all.addAll(wrapperPackages);

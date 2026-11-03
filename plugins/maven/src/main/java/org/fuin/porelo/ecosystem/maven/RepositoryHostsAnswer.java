@@ -8,9 +8,13 @@ import java.util.List;
  * @param hosts every host, each once per place
  * @param unknowns what could not be answered
  * @param unplaced what was seen and could not be taken into account
+ * @param everyPomRead false when a pom or a parent went unread, so what it says is not known
  */
 public record RepositoryHostsAnswer(
-        List<RepositoryHost> hosts, List<UnknownValue> unknowns, List<Unplaced> unplaced) {
+        List<RepositoryHost> hosts,
+        List<UnknownValue> unknowns,
+        List<Unplaced> unplaced,
+        boolean everyPomRead) {
 
     /** Copies the lists. */
     public RepositoryHostsAnswer {

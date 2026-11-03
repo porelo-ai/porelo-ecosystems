@@ -374,6 +374,48 @@ class MavenEcosystemTest {
         }
 
         @Test
+        void aReleaseFromAParentInTheLocalRepositoryIsTheMachines() throws IOException {
+            f.localPom(
+                            "org.example",
+                            "above",
+                            "1",
+                            project("above", properties("maven.compiler.release", "25")))
+                    .pom("pom.xml", project("child", Fixture.parent("above", "")));
+
+            assertThat(only("java.version").origin())
+                    .as("another machine may hold another parent, or none")
+                    .isEqualTo(Finding.Origin.MACHINE);
+            assertThat(only("package.openjdk-25-jdk-headless").origin())
+                    .as("the package stands where what asks for it stands")
+                    .isEqualTo(Finding.Origin.MACHINE);
+        }
+
+        @Test
+        void aParentNotFoundMayAskARelease() throws IOException {
+            f.pom("pom.xml", project("child", Fixture.parent("absent", "")));
+
+            assertThat(only("java.version").unknown())
+                    .as("the parent may name one, so nothing says none is asked")
+                    .isTrue();
+            assertThat(detect().findings())
+                    .as("the default JDK would be a guess")
+                    .noneMatch(x -> x.key().contains("-jdk"));
+        }
+
+        @Test
+        void aModuleThatCannotBeReadMayAskARelease() throws IOException {
+            f.pom("pom.xml", project("child", "<modules><module>m</module></modules>"))
+                    .pom("m/pom.xml", "<project><broken");
+
+            assertThat(only("java.version").unknown())
+                    .as("the module may name one, so nothing says none is asked")
+                    .isTrue();
+            assertThat(detect().findings())
+                    .as("the default JDK would be a guess")
+                    .noneMatch(x -> x.key().contains("-jdk"));
+        }
+
+        @Test
         void aReleaseNothingFillsInNamesNoJdk() throws IOException {
             f.pom("pom.xml", project("child", properties("maven.compiler.release", "${unset}")));
 
