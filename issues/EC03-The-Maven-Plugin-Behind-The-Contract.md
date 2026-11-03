@@ -3,9 +3,9 @@
 **Status:** Review.
 **Size:** M - one class behind the contract, a reader of what a task's image needs, the settings a task's Maven reads, the global settings and proxies, and the executable with its package.
 
-**What must be true.** The Maven plugin is a native executable, in its own package, that Porelo finds at run time: it answers `Detect` over the `Ecosystem1` contract with the tools a checkout needs (the JDK, Maven, the system packages) and the rules ([EC02](README.md#ec02)'s hosts, memory, credential ids), every value with its file and line. `Configure` follows `porelo`'s broker. It is built on the plain model builder, registers the public methods of all Maven model types for reflection, since a pom's `${project.…}` reaches them, and turns a reflection `Error` into a refusal naming the file. It never reads a password: a server is named by its id, with whether it is known.
+**What must be true.** The Maven plugin is a native executable, in its own package, that Porelo finds at run time: it answers `Detect` over the `Ecosystem1` contract with the tools a checkout needs (the JDK, Maven, the system packages) and the rules (the repository hosts, memory, credential ids), every value with its file and line. `Configure` follows `porelo`'s broker. It is built on the plain model builder, registers the public methods of all Maven model types for reflection, since a pom's `${project.…}` reaches them, and turns a reflection `Error` into a refusal naming the file. It never reads a password: a server is named by its id, with whether it is known.
 
-**What it takes over from [EC02](README.md#ec02).** The settings of a Maven installation and the settings' proxies go in here. A `-s` file is placed by where it lies: in the checkout `CHECKOUT`, under the home `YOURS`, elsewhere `MACHINE` with an absolute path. Built on [EC02](README.md#ec02) as it stands, whose acceptance is still open.
+**What it adds to the recognition of repository hosts.** The settings of a Maven installation and the settings' proxies go in here. A `-s` file is placed by where it lies: in the checkout `CHECKOUT`, under the home `YOURS`, elsewhere `MACHINE` with an absolute path.
 
 ## Plan
 

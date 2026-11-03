@@ -62,11 +62,11 @@ The local-only resolver is about 25 lines. It must also find the local repositor
 
 ### What it means for what follows
 
-- [EC02](README.md#ec02) builds on the bare model builder: its Plan gains the settings reader, the resolver and the check of a value's file.
+- The recognition of repository hosts builds on the bare model builder, with the settings reader, the resolver and the check of a value's file.
 - [EC03](README.md#ec03) takes the metadata above and the refusal of a reflection `Error`.
 - A value can come from neither the person nor the checkout: a parent in the local repository, or the super POM; the contract's `MACHINE` says so. A checkout with `.mvn/extensions.xml` is reported as an unplaced finding naming the file.
 
 ## Acceptance
 
 - The numbers above are written here, each from a run, with the versions used.
-- The answer names what [EC02](README.md#ec02) and [EC03](README.md#ec03) build on.
+- The answer names what the recognition of repository hosts and [EC03](README.md#ec03) build on.
