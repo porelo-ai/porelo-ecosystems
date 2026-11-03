@@ -22,7 +22,7 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 | The manager is absent from the final image | Green: no `sdk`, no file named `*sdkman*`, no variable. |
 | Paths for user `agent`, in `bash -c` and `sh -c`, with `ENV` alone | Green: `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`, `MAVEN_HOME`, `GRAALVM_HOME`, `PATH`. |
 | The same stage from vendor URLs and digests, no SDKMAN | Green: 72 s, 1.16 GB, same versions. A wrong digest stops the build (`FAILED`, exit 1). |
-| Plain lines in the image, no build stage, with today's newest: Temurin 25.0.5, Maven 3.10.0, GraalVM CE 25.0.5.0.3; `env` as Porelo sets it, links in `/usr/local/bin` | Green: 79 s, 1.37 GB with the native packages, all commands for `agent` in `bash -c` and `sh -c`; Hello World and a native build run. |
+| Plain lines in the image, no build stage, rootless on a developer machine rather than the VM, with the newest at that time: Temurin 25.0.5, Maven 3.10.0, GraalVM CE 25.0.5.0.3; `env` as Porelo sets it, links in `/usr/local/bin` | Green: 79 s, 1.37 GB with the native packages, all commands for `agent` in `bash -c` and `sh -c`; Hello World and a native build run. |
 | Hello World in the box, only `repo.maven.apache.org` through a proxy | Green: 21 s, on the final image with no package added. A direct connection is refused. |
 | Native build on that final image | Red, as expected: `'gcc' not found`. |
 | Native build with `gcc`, `libc6-dev`, `zlib1g-dev` | Green: 1m34s with `JAVA_HOME` on Temurin and `GRAALVM_HOME` set, 1m07s with `JAVA_HOME` on GraalVM. The executable runs. The proxy saw no host but Maven's. |
