@@ -7,7 +7,7 @@
 
 - A build stage fetches each tool by URL and digest, with no tool manager, and the final image holds only the artifact and its paths.
 - When `project.yml` is made, the newest stable version of what the project asks is found: the newest 25 for Java 25, the newest stable Maven in the pom's range, GraalVM likewise. Pre-releases never count. Offline or on a vendor's failure, the draft says unknown and names what was asked.
-- The plugin only bootstraps: what `project.yml` holds afterward is the person's.
+- `project.yml` holds the download URL and digest of the version found when the file is made, and the image's build checks it. From then on it is the person's: the plugin only bootstraps.
 - The paths are set correctly: `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`, `MAVEN_HOME`, `PATH`, and for GraalVM `GRAALVM_HOME`.
 - `native-maven-plugin` is recognized and brings GraalVM with `native-image` and every library it needs, so such a build works without a hand-written snippet.
 - `mvnw` keeps priority for Maven.
@@ -62,7 +62,7 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 
 **Pre-releases are filtered, never taken from the source's own word.** `maven-metadata.xml` names `4.0.0-rc-7` as both `latest` and `release`, and the newest stable among its 90 versions is 3.10.0. A version is stable only without a qualifier; a range is applied after that filter, since `[3.9,)` holds the release candidates too.
 
-**The digest comes from the same source as the archive.** It catches a broken download, and proves no more than the TLS connection it was read over. Pinning is the person's to do if they want it; Porelo makes no promise of it.
+**The digest comes from the same source as the archive.** It catches a broken or changed download from then on, and of the first sight proves no more than the TLS connection it was read over.
 
 **The answer.** `detect` keeps `java.version` and `maven.version` as what was asked. `resolve` answers a list, since one string does not hold it:
 
@@ -71,7 +71,7 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 
 For Maven: `java` (`env` `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`; `path` `bin`), `maven` unless a wrapper fetches it (`MAVEN_HOME`), and with `native-maven-plugin` `graalvm` (`GRAALVM_HOME`). `package.openjdk-*`, `package.default-jdk-headless` and `package.maven` go; `package.gcc`, `package.zlib1g-dev` and a new `package.libc6-dev` stay.
 
-**The form in `project.yml`**, under `image:`, is on hold until the open question below is answered. As a first shape, with the digest naming its algorithm, as Maven publishes sha512 and the others sha256:
+**The form in `project.yml`**, under `image:`, with the digest naming its algorithm, as Maven publishes sha512 and the others sha256:
 
     tools:
       - name: java
@@ -91,10 +91,6 @@ Porelo reads `name` as a label, so it names no build tool: its stage fetches, ch
 **Fit of the other plugins, by reading.** Gradle fits: its wrapper already names a digest, and the JDK is the same row. npm fits with Node's archive. pip fits with a standalone Python build, whose digest is still to be read. Flutter fits for its SDK, while its Android SDK and the packages a native wheel or `node-gyp` needs stay `package.<name>` or unknown.
 
 **A native build's JDK.** Both ways were green; GraalVM alone would be one tool less where its major equals the release, while a project whose JDK and GraalVM differ needs both. The plugin answers both.
-
-## Open questions
-
-- Whether `project.yml` holds the version found when it is made, or only what was asked. If only what was asked, the lookup also runs at each image build, so that build needs the step's hosts, and two builds can differ.
 
 ## To be checked
 
