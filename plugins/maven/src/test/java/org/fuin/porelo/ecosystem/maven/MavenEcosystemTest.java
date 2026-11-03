@@ -292,7 +292,7 @@ class MavenEcosystemTest {
 
             assertThat(detect().findings())
                     .as("no build runs it")
-                    .noneMatch(x -> x.key().startsWith("package."));
+                    .noneMatch(x -> x.key().equals("package.gcc"));
         }
 
         @Test
@@ -321,8 +321,160 @@ class MavenEcosystemTest {
             assertThat(packages)
                     .extracting(Finding::key)
                     .as("neither its own script nor the JDK's java needs a package")
-                    .containsExactlyInAnyOrder("package.protoc", "package.${tool.path}");
+                    .containsExactlyInAnyOrder(
+                            "package.protoc",
+                            "package.${tool.path}",
+                            "package.default-jdk-headless",
+                            "package.maven");
             assertThat(only("package.${tool.path}").unknown()).as("never guessed").isTrue();
+        }
+    }
+
+    /** Harm prevented: the image has no JDK or Maven, so no build can start in a task. */
+    @Nested
+    class WhatTheImageInstalls {
+        private static final String WRAPPER = ".mvn/wrapper/maven-wrapper.properties";
+        private static final String ZIP =
+                "distributionUrl=https\\://dl.example.org/apache-maven-3.9.15-bin.zip\n";
+        private static final String ONLY_SCRIPT = "distributionType=only-script\n";
+        private static final String DIGEST = "distributionSha256Sum=abc\n";
+
+        @ParameterizedTest
+        @CsvSource({"25, 25", "21, 21", "17, 17", "11, 11", "1.8, 8", "22, 25", "9, 11", "1.5, 8"})
+        void theJdkIsTheLowestPackagedOneThatCompilesTheRelease(String written, String packaged)
+                throws IOException {
+            f.pom("pom.xml", project("child", properties("maven.compiler.release", written)));
+
+            String key = "package.openjdk-" + packaged + "-jdk-headless";
+
+            assertThat(only(key).value())
+                    .as("the name apt installs")
+                    .isEqualTo(key.substring("package.".length()));
+            assertThat(only(key).part()).isEqualTo(Finding.Part.TOOLS);
+            assertThat(only(key).line()).as("where the release is asked").isPositive();
+            assertThat(only(key).unknown()).isFalse();
+        }
+
+        @Test
+        void aReleaseAboveEveryPackagedJdkIsUnknownAndNeverGuessed() throws IOException {
+            f.pom("pom.xml", project("child", properties("maven.compiler.release", "26")));
+
+            assertThat(only("package.openjdk-26-jdk-headless").unknown())
+                    .as("an older JDK cannot compile it")
+                    .isTrue();
+        }
+
+        @Test
+        void aPomAskingNoReleaseGetsTheDefaultJdk() throws IOException {
+            f.pom("pom.xml", project("child", ""));
+
+            assertThat(only("package.default-jdk-headless").value())
+                    .as("Maven runs on a JDK even when nothing names one")
+                    .isEqualTo("default-jdk-headless");
+        }
+
+        @Test
+        void aReleaseNothingFillsInNamesNoJdk() throws IOException {
+            f.pom("pom.xml", project("child", properties("maven.compiler.release", "${unset}")));
+
+            assertThat(detect().findings())
+                    .as("the unknown stays, and no JDK is guessed beside it")
+                    .noneMatch(x -> x.key().contains("jdk"));
+        }
+
+        @Test
+        void aWrapperThatRunsNeedsNoMavenPackage() throws IOException {
+            f.pom("pom.xml", project("child", "")).pom(WRAPPER, ZIP).pom("mvnw", "");
+
+            assertThat(detect().findings())
+                    .as("the wrapper fetches its own, and a packaged one is another version")
+                    .noneMatch(x -> x.key().equals("package.maven"));
+        }
+
+        @Test
+        void wrapperPropertiesWithoutItsScriptStillNeedAMavenPackage() throws IOException {
+            f.pom("pom.xml", project("child", "")).pom(WRAPPER, ZIP);
+
+            assertThat(only("package.maven").file())
+                    .as("nothing runs the wrapper, so mvn does")
+                    .isEqualTo(WRAPPER);
+        }
+
+        @Test
+        void noWrapperNeedsAMavenPackageAndSaysWhatThePomAsks() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.apache.maven.plugins",
+                                    "maven-enforcer-plugin",
+                                    """
+                                    <executions><execution><configuration><rules><requireMavenVersion>
+                                      <version>[3.9,)</version>
+                                    </requireMavenVersion></rules></configuration></execution></executions>
+                                    """)));
+
+            Finding maven = only("package.maven");
+
+            assertThat(maven.value()).isEqualTo("maven");
+            assertThat(maven.line())
+                    .as("where the version is asked")
+                    .isEqualTo(only("maven.version").line());
+            assertThat(maven.note()).as("a packaged one may not meet it").contains("[3.9,)");
+        }
+
+        @Test
+        void aScriptOnlyWrapperCheckingAZipNeedsUnzip() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(WRAPPER, "# pinned\n" + ONLY_SCRIPT + ZIP + DIGEST)
+                    .pom("mvnw", "");
+
+            assertThat(only("package.unzip").file()).isEqualTo(WRAPPER);
+            assertThat(only("package.unzip").line()).as("the URL's line").isEqualTo(3);
+        }
+
+        @ParameterizedTest
+        @CsvSource({"no digest,true,false", "no script type,false,true"})
+        void aWrapperThatCanDoWithoutUnzipNamesNone(String why, boolean onlyScript, boolean digest)
+                throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(WRAPPER, (onlyScript ? ONLY_SCRIPT : "") + ZIP + (digest ? DIGEST : ""))
+                    .pom("mvnw", "");
+
+            assertThat(detect().findings()).as(why).noneMatch(x -> x.key().equals("package.unzip"));
+        }
+
+        @Test
+        void aWrapperFetchingATarballNeedsNoUnzip() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            WRAPPER,
+                            ONLY_SCRIPT
+                                    + "distributionUrl=https\\://dl.example.org/apache-maven-3.9.15-bin.tar.gz\n"
+                                    + DIGEST)
+                    .pom("mvnw", "");
+
+            assertThat(detect().findings())
+                    .as("tar is in the image already")
+                    .noneMatch(x -> x.key().equals("package.unzip"));
+        }
+
+        @Test
+        void aReactorInstallsOneJdkTheHighestItAsks() throws IOException {
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    "<modules><module>m</module></modules>"
+                                            + properties("maven.compiler.release", "17")))
+                    .pom("m/pom.xml", project("m", properties("maven.compiler.release", "25")));
+
+            assertThat(detect().findings())
+                    .extracting(Finding::key)
+                    .as("two would be a choice the image does not make")
+                    .filteredOn(key -> key.contains("-jdk"))
+                    .containsExactly("package.openjdk-25-jdk-headless");
         }
     }
 

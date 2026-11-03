@@ -27,6 +27,9 @@ import org.jspecify.annotations.Nullable;
 final class ToolNeeds {
     private static final String WRAPPER = ".mvn/wrapper/maven-wrapper.properties";
     private static final String JVM_CONFIG = ".mvn/jvm.config";
+    private static final String ONLY_SCRIPT = "distributionType=only-script";
+    private static final String DIGEST = "distributionSha256Sum=";
+    private static final Place NOTHING_ASKED = new Place("pom.xml", 0, Origin.CHECKOUT);
     private static final String COMPILER = "org.apache.maven.plugins:maven-compiler-plugin";
     private static final String ENFORCER = "org.apache.maven.plugins:maven-enforcer-plugin";
     private static final String EXEC = "org.codehaus.mojo:exec-maven-plugin";
@@ -44,6 +47,9 @@ final class ToolNeeds {
                     "org.codehaus.mojo:buildnumber-maven-plugin", List.of("git"),
                     "io.fabric8:docker-maven-plugin", List.of("docker"),
                     "com.spotify:dockerfile-maven-plugin", List.of("docker"));
+    // The JDKs Ubuntu 24.04, Porelo's default image, packages, as measured; a JDK compiles older
+    // releases.
+    private static final List<Integer> PACKAGED_JDKS = List.of(8, 11, 17, 21, 25);
     private static final Pattern FIRST_VERSION = Pattern.compile("(\\d+)(?:\\.(\\d+))?");
     private static final Pattern HEAP = Pattern.compile("-Xmx(\\d+)([kKmMgG]?)");
     private static final Pattern WRAPPED_MAVEN =
@@ -54,10 +60,12 @@ final class ToolNeeds {
     private int highestJava;
     private @Nullable Finding javaUnknown;
     private @Nullable Finding maven;
+    private boolean wrapperRuns;
     private @Nullable Finding testMemory;
     private long highestTestMemory;
     private final Map<String, Finding> packages = new LinkedHashMap<>();
     private final List<Finding> fromFiles = new ArrayList<>();
+    private final List<Finding> wrapperPackages = new ArrayList<>();
 
     ToolNeeds(Path checkout) {
         this.checkout = checkout;
@@ -78,17 +86,41 @@ final class ToolNeeds {
         List<Finding> all = new ArrayList<>();
         if (java != null) {
             all.add(java);
+            all.add(jdkPackage(java));
         } else if (javaUnknown != null) {
             all.add(javaUnknown);
+        } else {
+            all.add(
+                    Answers.tool(
+                            "package.default-jdk-headless",
+                            "default-jdk-headless",
+                            NOTHING_ASKED,
+                            "Maven runs on a JDK, and no Java release is asked for"));
         }
-        all.add(
+        Finding mavenAsked =
                 maven != null
                         ? maven
                         : Answers.tool(
                                 "maven.version",
                                 "",
-                                new Place("pom.xml", 0, Origin.CHECKOUT),
-                                "no version is asked for, so any Maven serves"));
+                                NOTHING_ASKED,
+                                "no version is asked for, so any Maven serves");
+        all.add(mavenAsked);
+        if (wrapperRuns) {
+            all.addAll(wrapperPackages);
+        } else {
+            all.add(
+                    beside(
+                            mavenAsked,
+                            "maven",
+                            false,
+                            "no wrapper runs the build, so the image's Maven does"
+                                    + (mavenAsked.value().isEmpty()
+                                            ? ""
+                                            : ", which may not be the "
+                                                    + mavenAsked.value()
+                                                    + " asked for")));
+        }
         all.addAll(packages.values());
         all.addAll(fromFiles);
         if (testMemory != null) {
@@ -97,9 +129,43 @@ final class ToolNeeds {
         return all;
     }
 
+    private static Finding jdkPackage(Finding java) {
+        int release = Integer.parseInt(java.value());
+        for (int packaged : PACKAGED_JDKS) {
+            if (packaged >= release) {
+                return beside(
+                        java,
+                        "openjdk-" + packaged + "-jdk-headless",
+                        false,
+                        "the lowest JDK packaged that compiles Java " + release);
+            }
+        }
+        return beside(
+                java,
+                "openjdk-" + release + "-jdk-headless",
+                true,
+                "no JDK known to be packaged compiles Java " + release);
+    }
+
+    // The package stands where what asks for it stands, so a person reads both in one place.
+    private static Finding beside(Finding asked, String name, boolean unknown, String note) {
+        return new Finding(
+                Finding.Part.TOOLS,
+                "package." + name,
+                unknown ? "" : name,
+                asked.file(),
+                asked.line(),
+                asked.origin(),
+                unknown,
+                note);
+    }
+
     private void readWrapper() {
         Path file = checkout.resolve(WRAPPER);
         List<String> lines = lines(file);
+        wrapperRuns = Files.isRegularFile(checkout.resolve("mvnw"));
+        boolean onlyScript = lines.stream().anyMatch(l -> l.strip().equals(ONLY_SCRIPT));
+        boolean digest = lines.stream().anyMatch(l -> l.strip().startsWith(DIGEST));
         for (int i = 0; i < lines.size(); i++) {
             String line = lines.get(i).strip();
             if (!line.startsWith("distributionUrl=")) {
@@ -108,6 +174,15 @@ final class ToolNeeds {
             // A properties file writes the colon of a URL with a backslash in front of it.
             String url = line.substring("distributionUrl=".length()).replace("\\", "");
             Place place = new Place(WRAPPER, i + 1, Origin.CHECKOUT);
+            if (onlyScript && digest && url.endsWith(".zip")) {
+                wrapperPackages.add(
+                        Answers.tool(
+                                "package.unzip",
+                                "unzip",
+                                place,
+                                "without it the wrapper fetches a tarball, which fails the digest"
+                                        + " of this zip"));
+            }
             Matcher version = WRAPPED_MAVEN.matcher(url);
             if (version.find()) {
                 maven =
