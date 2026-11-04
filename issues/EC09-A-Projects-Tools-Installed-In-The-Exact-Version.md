@@ -51,7 +51,7 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 
 **A fetch by URL and digest, no SDKMAN, in ordinary lines.** The same small `RUN` serves every tool and plugin, needs no new field and no stage in the image builder, reads as what it does, and the person can change it. It reaches what SDKMAN cannot, adds no host of its own, and checks what SDKMAN leaves unchecked.
 
-**The online step, a call of its own in the contract.** Reading stays as it is: `detect` needs no network and answers what is asked. A new `resolve` takes those asks and asks the vendors once, when the file is made, and Porelo shows it in the draft as its own step, naming each host. It is the one place in the plugin with an HTTP client.
+**The online step, a call of its own in the contract.** Reading stays as it is: `detect` needs no network and answers what is asked. A new `resolve`, a varlink method of its own beside `detect`, takes those asks and asks the vendors once, when the file is made: Porelo calls it only for `project init`, never for `task start`, and shows it in the draft as its own step, naming each host. It is the one place in the plugin with an HTTP client. The contract's sentence that a plugin opens no connection changes with it; today no `resolve` exists and the executable holds no HTTP client.
 
 | Tool | Host asked | What it answers, measured |
 |---|---|---|
@@ -65,18 +65,18 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 
 **The digest comes from the same source as the archive.** It catches a broken or changed download from then on, and of the first sight proves no more than the TLS connection it was read over.
 
-**The answer.** `detect` keeps `java.version` and `maven.version` as what was asked. `resolve` answers ordinary findings under two more kinds of key, which Porelo places by their prefix alone, so it names no build tool: `snippet.<name>`, whose value is the lines, and `env.<NAME>`, whose value is the variable's. Two plugins giving one key two values are a disagreement, as today.
+**The answer.** `detect` keeps `java.version` and `maven.version` as what was asked. `resolve` answers ordinary findings under two more kinds of key, which Porelo places by their prefix alone, so it names no build tool: `snippet.<name>`, whose value is the lines, joined in the order of the key's name, each with its source as a comment, and `env.<NAME>`, whose value is the variable's. Two plugins giving one key two values are a disagreement, as today.
 
 For Maven: `snippet.java`, `snippet.maven` unless a wrapper fetches it, and with `native-maven-plugin` `snippet.graalvm`; `env.JAVA_HOME`, `env.JDK_HOME`, `env.JRE_HOME`, `env.MAVEN_HOME`, `env.GRAALVM_HOME`. `package.openjdk-*`, `package.default-jdk-headless` and `package.maven` go; `package.gcc`, `package.zlib1g-dev` and a new `package.libc6-dev` stay.
 
-**What `project.yml` then holds**, under `image:`, written once and then the person's:
+**What `project.yml` then holds**, under the repository's `image:` (`repositories.<name>.image`, where the draft writes its image lines today), written once and then the person's:
 
     snippet: |
       RUN set -eu; mkdir -p /opt/java; curl -fsSL -o /tmp/java.tgz '<url>'; echo '<digest>  /tmp/java.tgz' | sha256sum -c -; tar xzf /tmp/java.tgz -C /opt/java --strip-components=1; rm /tmp/java.tgz; ln -s /opt/java/bin/* /usr/local/bin/
     env:
       JAVA_HOME: /opt/java
 
-**`PATH` cannot be set this way:** `image.env` refuses it, as Porelo sets it in every task. So each tool's commands are linked into `/usr/local/bin`, which stands on that path. From a second tool holding the same names, such as GraalVM's `java`, only what it adds is linked.
+**`PATH` cannot be set this way:** `image.env` refuses it, as Porelo sets it in every task, and an `env.PATH` is refused too. So each tool's commands are linked into `/usr/local/bin`, which stands on that path. From a second tool holding the same names, such as GraalVM's `java`, only what it adds is linked.
 
 **What a vendor answered goes into lines a build runs as root**, so `resolve` writes a URL, version and digest only when each holds what it should: `https`, a known host, a plain character set, a hex digest. Anything else is an unknown.
 
@@ -84,7 +84,7 @@ For Maven: `snippet.java`, `snippet.maven` unless a wrapper fetches it, and with
 
 **What the image's build reaches**, differing from the step's hosts: `github.com` and its redirect `release-assets.githubusercontent.com`, and `repo.maven.apache.org`.
 
-**What the plugin process needs.** Porelo starts a plugin with an empty environment and no network namespace, so nothing blocks the step, and it would reach no proxy: `resolve` needs the person's proxy settings passed in, for this call alone. The executable gains `https` and an HTTP client, whose size is not measured.
+**What the plugin process needs.** Porelo starts a plugin with an empty environment and no network namespace, so nothing blocks the step, and it would reach no proxy: `resolve` needs the person's proxy settings passed in, for this call alone: `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms. The executable gains `https` and an HTTP client, whose size is not measured.
 
 **Fit of the other plugins, by reading.** Gradle fits: its wrapper already names a digest, and the JDK is the same row. npm fits with Node's archive. pip fits with a standalone Python build, whose digest is still to be read. Flutter fits for its SDK, while its Android SDK and the packages a native wheel or `node-gyp` needs stay `package.<name>` or unknown.
 
@@ -93,7 +93,7 @@ For Maven: `snippet.java`, `snippet.maven` unless a wrapper fetches it, and with
 ## To be checked
 
 - That these lines and `env` work through a real task and the image builder, as they ran under plain `podman` only.
-- How a draft orders the lines, and that a snippet taken whole from another source replaces them, as the file's order of sources says.
+- That a snippet taken whole from another source replaces the draft's lines, as the file's order of sources says.
 - The size the HTTP client adds to the executable.
 - That GraalVM's asset names read the same for its next releases, and the Python builds' digests.
 - The first run's times through the real step: only single requests were timed.

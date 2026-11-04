@@ -29,7 +29,8 @@
 ## Open
 
 - **An `Error` from the builder** was never seen in a run: leaving a type out gave an unknown instead, so that catch is untested.
-- **The keys are this plugin's, until Porelo's merge names them:** it is not built yet, and may ask for others.
+- **The keys are this plugin's, and Porelo's merge places only some:** `host.<host>` as egress, `package.<name>` as an image line and `credential.<id>` as a credential needed in the vault. `java.version`, `maven.version`, `memory.maven` and `memory.tests` stay in the draft as comments for the person.
+- **Nothing in Porelo calls `Configure` yet,** so the file it answers reaches no task.
 - **Which Maven's global settings count:** the plugin starts with an empty environment and knows no installation but the wrapper's; a Maven installed elsewhere, such as `/etc/maven/settings.xml`, is not read, and the build in its box has its own anyway.
 - **Proxies are not compared with real Maven:** `help:effective-pom` does not show them.
 - **The package is a `.deb` only**, and nothing publishes it; [EC08](README.md#ec08) does both.
