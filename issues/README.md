@@ -12,6 +12,12 @@ out.
 | <a id="ec08"></a>[EC08](EC08-The-Maven-Plugin-Published-As-A-Recommended-Package.md) | M | - | The Maven plugin published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
 | <a id="ec03"></a>[EC03](EC03-The-Maven-Plugin-Behind-The-Contract.md) | M | - | The Maven plugin as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs. |
 
+## Implementing
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec10"></a>[EC10](EC10-The-Reason-A-Plugin-Has-Nothing-To-Secure.md) | XS | - | The rule that a plugin has nothing to secure says its real reason: the plugin runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control. |
+
 ## Accepted
 
 | # | Size | Blocked by | What it covers |

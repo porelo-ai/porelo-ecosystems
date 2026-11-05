@@ -1,0 +1,17 @@
+# EC10 — The Reason A Plugin Has Nothing To Secure
+
+**Status:** Implementing.
+**Size:** XS - the wording of one rule and of the decision behind it; no code.
+
+**What must be true.** Whoever reads the rule that a plugin has nothing to secure finds the reason that holds when a plugin runs on a checkout just cloned, before the person has said anything: the plugin runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control.
+
+## Plan
+
+- `AGENTS.md`, this repository's own part, and `doc/decisions.md`, its index row and its entry, state that reason in place of the old one, that a setting which is a problem is one without Porelo too.
+- What follows from it stays: the aim is the right answer, no hostile checkout is hardened against, and the entry's title and anchor stay as they are.
+- No code changes, so no test goes red first.
+
+## Acceptance
+
+- Both places give the same reason, in those three parts, and neither still rests on the developer's machine as the reason.
+- The document checks are green.
