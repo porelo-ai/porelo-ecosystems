@@ -15,8 +15,14 @@
         <maven-model-builder.version>3.10.0</maven-model-builder.version>
         <porelo-ecosystem-api.version>0.5.1-SNAPSHOT</porelo-ecosystem-api.version>
         <jdeb.version>1.14</jdeb.version>
-        <!-- Maven's -SNAPSHOT sorts above its release in apt, ~SNAPSHOT below it. -->
-        <package.version>0.1.0~SNAPSHOT</package.version>
+        <!-- The build's run number: a snapshot's package is <version>~snapshot.<run>, below its release and above the
+             run before, or apt and dnf would never offer a newer build. -->
+        <package.snapshot.run>0</package.snapshot.run>
+        <!-- What the executable links, read with readelf, which both packages declare by hand: neither plugin reads a
+             binary. check-linkage holds the executable to them. -->
+        <package.glibc.floor>2.34</package.glibc.floor>
+        <package.glibc.ceiling>2.41</package.glibc.ceiling>
+        <package.zlib.floor>1.2.2</package.zlib.floor>
     </properties>
     <dependencies>
         <dependency>
@@ -114,6 +120,26 @@
                         </executions>
                     </plugin>
                     <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>build-helper-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>package-version</id>
+                                <phase>validate</phase>
+                                <goals>
+                                    <goal>regex-property</goal>
+                                </goals>
+                                <configuration>
+                                    <name>package.version</name>
+                                    <value>${project.version}</value>
+                                    <regex>-SNAPSHOT$</regex>
+                                    <replacement>~snapshot.${package.snapshot.run}</replacement>
+                                    <failIfNoMatch>false</failIfNoMatch>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
                         <groupId>org.vafer</groupId>
                         <artifactId>jdeb</artifactId>
                         <version>${jdeb.version}</version>
@@ -141,7 +167,124 @@
                                                 <group>root</group>
                                             </mapper>
                                         </data>
+                                        <!-- Debian Policy 12.5: every binary package ships one. -->
+                                        <data>
+                                            <src>${project.basedir}/src/deb/copyright/copyright</src>
+                                            <type>file</type>
+                                            <mapper>
+                                                <type>perm</type>
+                                                <prefix>/usr/share/doc/${project.artifactId}</prefix>
+                                                <filemode>644</filemode>
+                                                <user>root</user>
+                                                <group>root</group>
+                                            </mapper>
+                                        </data>
                                     </dataSet>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>de.dentrassi.maven</groupId>
+                        <artifactId>rpm</artifactId>
+                        <version>${dentrassi-rpm.version}</version>
+                        <executions>
+                            <execution>
+                                <id>rpm</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>rpm</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                        <configuration>
+                            <packageName>${project.artifactId}</packageName>
+                            <version>${package.version}</version>
+                            <snapshotVersion>${package.version}</snapshotVersion>
+                            <release>1</release>
+                            <!-- Without this a snapshot gets a timestamp release, and the rpm and the deb disagree. -->
+                            <forceRelease>true</forceRelease>
+                            <summary>Recognizes what a Maven checkout needs, for Porelo</summary>
+                            <description>Installs one program under /usr/libexec/porelo/ecosystems, where the porelo binary finds its build-tool plugins. It reads a checkout's poms and the person's Maven settings, runs no project code and opens no connection.</description>
+                            <architecture>x86_64</architecture>
+                            <group>Applications/System</group>
+                            <license>GPL-3.0-or-later AND Apache-2.0</license>
+                            <packager>Michael Schnell &lt;michael@fuin.org&gt;</packager>
+                            <requires>
+                                <require>porelo</require>
+                                <!-- The names rpmbuild itself generates for these libraries. -->
+                                <require>libc.so.6(GLIBC_${package.glibc.floor})(64bit)</require>
+                                <require>libz.so.1(ZLIB_${package.zlib.floor})(64bit)</require>
+                            </requires>
+                            <signature>
+                                <skip>true</skip>
+                            </signature>
+                            <entries>
+                                <entry>
+                                    <name>/usr/libexec/porelo/ecosystems/maven</name>
+                                    <file>${project.build.directory}/${project.artifactId}</file>
+                                    <mode>0755</mode>
+                                    <user>root</user>
+                                    <group>root</group>
+                                </entry>
+                                <!-- 'license' marks it %license, so 'rpm -qL' answers. -->
+                                <entry>
+                                    <name>/usr/share/licenses/${project.artifactId}/LICENSE</name>
+                                    <file>${maven.multiModuleProjectDirectory}/LICENSE</file>
+                                    <mode>0644</mode>
+                                    <user>root</user>
+                                    <group>root</group>
+                                    <license>true</license>
+                                </entry>
+                                <entry>
+                                    <name>/usr/share/licenses/${project.artifactId}/LICENSE.Apache-2.0</name>
+                                    <file>${maven.multiModuleProjectDirectory}/LICENSE-Apache-2.0</file>
+                                    <mode>0644</mode>
+                                    <user>root</user>
+                                    <group>root</group>
+                                    <license>true</license>
+                                </entry>
+                            </entries>
+                        </configuration>
+                    </plugin>
+                    <!-- After both packages, as all bind to verify and run in this order: the executable against what
+                         the packages declare, then what the packages say their version is. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>check-linkage</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${java.home}/bin/java</executable>
+                                    <includeProjectDependencies>false</includeProjectDependencies>
+                                    <includePluginDependencies>true</includePluginDependencies>
+                                    <executableDependency>
+                                        <groupId>org.fuin.porelo</groupId>
+                                        <artifactId>porelo-release</artifactId>
+                                    </executableDependency>
+                                    <commandlineArgs>-classpath %classpath org.fuin.porelo.release.Main check-linkage --declare libc.so.6=GLIBC:${package.glibc.floor} --declare libz.so.1=ZLIB:${package.zlib.floor} --ceiling GLIBC=${package.glibc.ceiling} ${project.build.directory}/${project.artifactId}</commandlineArgs>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>check-package-version</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${java.home}/bin/java</executable>
+                                    <includeProjectDependencies>false</includeProjectDependencies>
+                                    <includePluginDependencies>true</includePluginDependencies>
+                                    <executableDependency>
+                                        <groupId>org.fuin.porelo</groupId>
+                                        <artifactId>porelo-release</artifactId>
+                                    </executableDependency>
+                                    <commandlineArgs>-classpath %classpath org.fuin.porelo.release.Main check-package-version ${project.artifactId} ${project.version} ${package.snapshot.run} ${project.build.directory}</commandlineArgs>
                                 </configuration>
                             </execution>
                         </executions>

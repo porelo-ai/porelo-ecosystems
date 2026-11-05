@@ -1,0 +1,2 @@
+title: The Maven plugin is published as a package of its own, a `.deb` and an `.rpm` that depend on Porelo, each snapshot with a newer version than the last.
+type: added

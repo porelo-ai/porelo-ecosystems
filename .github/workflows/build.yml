@@ -1,6 +1,7 @@
 # Builds the plugins on every change to them: compiled, unit tests run, and the shared checks of the root's validate.
 # Nothing goes to Maven Central: a plugin is a native executable in a package of its own, found at run time over the
-# contract, and nothing builds against an artifact here. A push builds and tests the package; nothing publishes it yet.
+# contract, and nothing builds against an artifact here. A push to main publishes its .deb and .rpm to the snapshots
+# channel, and a tag v<version> to the releases channel, where Porelo's own packages lie.
 # Against porelo-parent as a snapshot while it is one (-U takes the newest), as the shared rules allow.
 name: Build
 
@@ -20,13 +21,14 @@ on:
 permissions:
     contents: read
 
+# One at a time per ref, and never cancelled: a publish stopped half way leaves one package without the other.
 concurrency:
     group: ${{ github.workflow }}-${{ github.ref }}
-    cancel-in-progress: true
+    cancel-in-progress: false
 
 jobs:
     build:
-        name: Build and test
+        name: Build, packages and publish
         # Pinned, not ubuntu-latest.
         runs-on: ubuntu-24.04
         # A run takes about 8 minutes, the executable most of them; a slow runner must end, not run for GitHub's six hours.
@@ -41,9 +43,14 @@ jobs:
             - name: The pinned GraalVM
               uses: ./.github/actions/pinned-jdk
 
+            # check-package-version reads the built .rpm with rpm, which the runner is not promised to have, and the
+            # packages are unpacked below with rpm2cpio and cpio.
+            - name: What reads the built packages
+              run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm rpm2cpio cpio
+
             # validate runs check-actions, check-shared, check-citations and check-readmes.
             - name: Build, tests, the executable and its package, and the shared checks
-              run: ./mvnw -B -U -s settings.xml -Pnative verify
+              run: ./mvnw -B -U -s settings.xml -Pnative verify -Dpackage.snapshot.run=${{ github.run_number }}
 
             # A direct push to main never meets the pull request's check, so the push's own range is read here, by the
             # rule this commit carries. A tag checks the commit it names alone, a first commit too. The push that creates main names no start (all
@@ -92,3 +99,163 @@ jobs:
               run: |
                   ./mvnw -B -s settings.xml help:effective-pom -Doutput=target/effective-pom.xml
                   ./mvnw -B -s settings.xml -N exec:exec@check-releases
+
+            # Each as a machine would hold it: a package missing a library or built wrongly stops here, not on a person's machine.
+            - name: Each package answers from what it unpacks to, with an empty environment
+              run: |
+                  set -euo pipefail
+                  only() {
+                      [ "$#" = 1 ] && [ -f "$1" ] || { echo "::error::expected one package, matched: $*" >&2; exit 1; }
+                      echo "$1"
+                  }
+                  answers() {
+                      local said
+                      said="$(env -i "$1/usr/libexec/porelo/ecosystems/maven" describe)"
+                      echo "  $2 answers $said"
+                      [ "$said" = '{"protocolVersion":1,"ecosystem":"maven"}' ] \
+                          || { echo "::error::$2 answered '$said'"; exit 1; }
+                  }
+                  deb="$(only plugins/maven/target/*.deb)"
+                  rpm="$(only plugins/maven/target/*.rpm)"
+                  dpkg-deb -x "$deb" "$RUNNER_TEMP/deb"
+                  answers "$RUNNER_TEMP/deb" "$(basename "$deb")"
+                  mkdir "$RUNNER_TEMP/rpm"
+                  rpm2cpio "$PWD/$rpm" | (cd "$RUNNER_TEMP/rpm" && cpio -idm --quiet)
+                  answers "$RUNNER_TEMP/rpm" "$(basename "$rpm")"
+
+            - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+              with:
+                  name: packages
+                  path: |
+                      plugins/maven/target/*.deb
+                      plugins/maven/target/*.rpm
+                  if-no-files-found: error
+
+            - name: Not publishing
+              if: "!(github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')))"
+              run: |
+                  echo "Not publishing. This run is '${{ github.event_name }}' on '${{ github.ref }}', and only a push to main"
+                  echo "or a tag v<version> publishes. The packages were built and checked here and are attached to this run."
+
+            # Switched by a variable, true where the packages are published and false where they are not; one missing
+            # or misspelt would leave them unpublished without a word.
+            - name: Whether this forge publishes
+              id: publishes
+              if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v'))
+              env:
+                  PORELO_PUBLISH: ${{ vars.PORELO_PUBLISH }}
+              run: |
+                  case "$PORELO_PUBLISH" in
+                      true | false) echo "publish=$PORELO_PUBLISH" | tee -a "$GITHUB_OUTPUT" ;;
+                      *) echo "::error::vars.PORELO_PUBLISH is '$PORELO_PUBLISH', neither true nor false"; exit 1 ;;
+                  esac
+
+            - name: Which channel
+              id: channel
+              if: steps.publishes.outputs.publish == 'true'
+              run: |
+                  set -eu
+                  if [ "$GITHUB_REF_TYPE" = tag ]; then
+                      echo "channel=releases" >> "$GITHUB_OUTPUT"
+                  else
+                      VERSION="$(sed -n 's|^    <version>\(.*\)</version>$|\1|p' pom.xml | head -1)"
+                      case "$VERSION" in
+                          *-SNAPSHOT) ;;
+                          *) echo "::error::$VERSION on a branch would publish a release as a snapshot"; exit 1 ;;
+                      esac
+                      echo "channel=snapshots" >> "$GITHUB_OUTPUT"
+                  fi
+                  tail -1 "$GITHUB_OUTPUT"
+
+            # Over Artifactory's REST interface with curl alone, so no downloaded tool runs beside the token, which
+            # reaches curl on standard input, never a file or a command line. A .deb without its properties is stored
+            # and never indexed.
+            - name: Publish the packages
+              timeout-minutes: 5
+              if: steps.publishes.outputs.publish == 'true'
+              env:
+                  JF_URL: ${{ vars.JF_URL }}
+                  JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+                  CHANNEL: ${{ steps.channel.outputs.channel }}
+              run: |
+                  set -euo pipefail
+                  case "$JF_URL" in
+                      https://?*) ;;
+                      *) echo "::error::variable JF_URL is '$JF_URL', not an https:// address the token may go to"; exit 1 ;;
+                  esac
+                  [ -n "$JF_ACCESS_TOKEN" ] || { echo "::error::secret JF_ACCESS_TOKEN is not set"; exit 1; }
+                  base="${JF_URL%/}/artifactory"
+                  # A glob that matches several files would shift put's arguments and upload the wrong thing.
+                  only() {
+                      [ "$#" = 1 ] && [ -f "$1" ] || { echo "::error::expected one package, matched: $*" >&2; exit 1; }
+                      echo "$1"
+                  }
+                  deb="$(only plugins/maven/target/*.deb)"
+                  rpm="$(only plugins/maven/target/*.rpm)"
+                  # Asked of the store, not the index, which lags an upload. A published release is never replaced, and an
+                  # answer other than there or not there stops the release.
+                  absent() {
+                      local status
+                      status="$(curl -sS --proto =https --max-time 30 -I -o /dev/null -w '%{http_code}' "$base/$1")" \
+                          || { echo "::error::$1 could not be read, so whether it is published is unknown"; exit 1; }
+                      case "$status" in
+                          404) ;;
+                          *) echo "::error::$1 answered $status: it is published already, or that is unknown"; exit 1 ;;
+                      esac
+                  }
+                  if [ "$CHANNEL" = releases ]; then
+                      absent "porelo-dist-deb/pool/main/p/porelo-ecosystem-maven/$(basename "$deb")"
+                      absent "porelo-dist-rpm/${CHANNEL}/$(basename "$rpm")"
+                  fi
+                  # Assigned first, so a checksum that cannot be computed stops here instead of sending an empty header,
+                  # which curl drops. Only a 2xx is an upload: curl's -f passes a redirect, which put does not follow, so
+                  # the token stays with this host.
+                  put() {
+                      local sha1 sha256 status
+                      sha1="$(sha1sum "$1" | cut -d' ' -f1)"
+                      sha256="$(sha256sum "$1" | cut -d' ' -f1)"
+                      echo "  put   $2$(basename "$1")"
+                      status="$(printf 'header = "Authorization: Bearer %s"\n' "$JF_ACCESS_TOKEN" \
+                          | curl -fsS --proto =https --max-time 120 -K - -o /dev/null -w '%{http_code}' -T "$1" \
+                              -H "X-Checksum-Sha1: $sha1" -H "X-Checksum-Sha256: $sha256" \
+                              "$base/$2$(basename "$1")${3:+;$3}")"
+                      case "$status" in
+                          2??) ;;
+                          *) echo "::error::Artifactory answered $status to the upload of $(basename "$1"), not a 2xx"; exit 1 ;;
+                      esac
+                  }
+                  put "$deb" "porelo-dist-deb/pool/main/p/porelo-ecosystem-maven/" \
+                      "deb.distribution=${CHANNEL};deb.component=main;deb.architecture=amd64"
+                  put "$rpm" "porelo-dist-rpm/${CHANNEL}/"
+
+            # Uploaded is not installable: indexing is asynchronous and fails silently. Read anonymously, as an installer
+            # sees it, and it must name the very file just uploaded: yesterday's build in the index would pass otherwise.
+            - name: The packages are indexed, not merely stored
+              if: steps.publishes.outputs.publish == 'true'
+              env:
+                  JF_URL: ${{ vars.JF_URL }}
+                  CHANNEL: ${{ steps.channel.outputs.channel }}
+              run: |
+                  set -euo pipefail
+                  base="${JF_URL%/}/artifactory"
+                  deb="$(basename plugins/maven/target/*.deb)"
+                  rpm="$(basename plugins/maven/target/*.rpm)"
+                  indexed() {
+                      local packages location primary
+                      packages="$(curl -sSfL --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-deb/dists/${CHANNEL}/main/binary-amd64/Packages")" || return 1
+                      grep -qxF "Filename: pool/main/p/porelo-ecosystem-maven/$deb" <<< "$packages" || return 1
+                      location="$(curl -sSfL --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-rpm/${CHANNEL}/repodata/repomd.xml" \
+                          | sed -n 's/.*<location href="\([^"]*primary.xml.gz\)".*/\1/p' | head -1)" || return 1
+                      [ -n "$location" ] || return 1
+                      primary="$(curl -sSfL --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-rpm/${CHANNEL}/$location" | gunzip)" || return 1
+                      grep -qF "$rpm" <<< "$primary"
+                  }
+                  for attempt in $(seq 1 20); do
+                      if indexed; then
+                          echo "indexed: $deb and $rpm"
+                          exit 0
+                      fi
+                      sleep 6
+                  done
+                  echo "::error::$deb or $rpm is uploaded but not indexed after 20 reads"
+                  exit 1

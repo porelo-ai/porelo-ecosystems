@@ -3,6 +3,8 @@ Version: [[package.version]]
 Section: utils
 Priority: optional
 Architecture: amd64
+# The executable links both, and jdeb does not read it to find out; check-linkage holds these floors to it.
+Depends: porelo, libc6 (>= [[package.glibc.floor]]), zlib1g (>= 1:[[package.zlib.floor]])
 Maintainer: Michael Schnell <michael@fuin.org>
 Homepage: https://github.com/porelo-ai/porelo-ecosystems
 Description: Recognizes what a Maven checkout needs, for Porelo

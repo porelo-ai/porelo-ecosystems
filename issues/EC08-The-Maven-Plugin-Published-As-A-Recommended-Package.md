@@ -1,6 +1,6 @@
 # EC08 — The Maven Plugin Published As A Recommended Package
 
-**Status:** Implementing.
+**Status:** Review.
 **Size:** M - one package's metadata, a second format, and a publishing step in the workflow; Porelo's own package changes one line in each of its formats.
 
 **What must be true.** A person who installs Porelo from its package source gets the Maven plugin by default, in a package of its own, and can leave it out or remove it without touching Porelo. It is not part of the interface's package.
@@ -37,7 +37,21 @@ On Ubuntu 24.04, with throwaway packages in a local package source:
 
 So no choice at installation needs anything beyond apt and dnf. A question asked during installation is something neither offers without a package prompt, and is not planned.
 
+## What the built packages do, measured
+
+Built with `-Pnative verify` on the pinned GraalVM, read and installed in clean containers, with a stand-in `porelo` package, since nothing is published yet:
+
+- Ubuntu 24.04: without `porelo`, `apt-get` refuses; with it, both install, `describe` answers with an empty environment, and removing the plugin leaves `porelo`.
+- Fedora 44: `rpm -i --test` names only `porelo` as missing, so its C library and zlib requirements hold; installed without that check, it answers the same and erases cleanly.
+- The two checks fail as they should: a version not moved names both packages (`check-package-version`), and a floor below what the executable links names the symbol (`check-linkage`). A package that does not answer stops the workflow's step, a `PORELO_PUBLISH` neither true nor false stops it, and a `JF_URL` not `https` stops before the token is sent.
+
+## Decided while building
+
+- **A release that fails between its two uploads is not completed by a rerun:** the rerun finds the first package stored and stops, and a native build's bytes differ, so it could not prove them the same. The release goes out under the next version instead. The exposure is one version number; it stays because a stop is loud and a published release is never replaced, and a release's bytes checked against the store would change the answer.
+
 ## To be checked
 
-- What dnf does in the cases above: read, not measured.
+- The publishing steps' upload, which runs only on the first push to `main`; that needs this repository's access to `JF_ACCESS_TOKEN`, `JF_URL` and `PORELO_PUBLISH`, which an agent's token cannot read.
+- The acceptance above against the published index, on Ubuntu and on Fedora, once Porelo's package names this one under `Recommends`.
+- What dnf does with a weak dependency: read, not measured.
 - Whether the setup script should offer leaving the plugin out: it installs with recommendations on and has no such option, so its users remove the package afterward.
