@@ -506,6 +506,7 @@ no build tool. What a plugin answers becomes a tools draft and a rules draft for
 - **Issue prefix: `EC`.**
 - **An issue covers one build tool only**, so one never waits for another.
 - **A module holds no code until its issue is built**: it stays a `pom` with a `README.md` until then.
+- **`corpus/` judges an adapter by real builds:** on an account kept for it, with Porelo running, `corpus.sh <tool>.conf <name> <url> <version> [commit]`, the arguments as a line of `<tool>.projects` names them, clones one project, builds it without Porelo as the reference, then by `podman exec` in the session's environment in a real task made from Porelo's real first start. Results go under `~/corpus/results`, and are written by hand into the issue that ran them. A new build tool brings its own `.conf`.
 
 ## Skills
 

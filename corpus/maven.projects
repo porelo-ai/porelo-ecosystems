@@ -1,0 +1,13 @@
+# name url reference-JDK commit: what maven.conf judges; a run reads one line as its arguments.
+spring-petclinic https://github.com/spring-projects/spring-petclinic.git 25 500158f
+jackson-databind https://github.com/FasterXML/jackson-databind.git 21 2abab9e
+utils4j https://github.com/fuinorg/utils4j.git 25 8a2b2bc
+commons-lang https://github.com/apache/commons-lang.git 21 e547d70
+commons-io https://github.com/apache/commons-io.git 21 aa916ea
+objects4j https://github.com/fuinorg/objects4j.git 21 8e330ac
+guava https://github.com/google/guava.git 21 592a1e6
+mapstruct https://github.com/mapstruct/mapstruct.git 21 211b2be
+dropwizard https://github.com/dropwizard/dropwizard.git 21 a8a09d8
+logbook https://github.com/zalando/logbook.git 21 b8604cc
+fastjson2 https://github.com/alibaba/fastjson2.git 21 35111f3
+spring-data-commons https://github.com/spring-projects/spring-data-commons.git 25 0d270c2
