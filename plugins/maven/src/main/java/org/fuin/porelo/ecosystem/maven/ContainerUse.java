@@ -30,8 +30,8 @@ final class ContainerUse {
                 add(
                         places.of(dependency.getLocation("")),
                         "this build uses Testcontainers, whose tests start containers, which a task"
-                                + " does not support, so those tests fail; -DskipTests leaves them"
-                                + " out");
+                                + " does not support, so those tests fail or skip themselves;"
+                                + " -DskipTests leaves them out");
             }
         }
         if (model.getBuild() != null) {

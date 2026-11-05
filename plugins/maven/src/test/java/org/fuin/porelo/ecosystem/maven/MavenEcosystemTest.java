@@ -784,6 +784,7 @@ class MavenEcosystemTest {
                                         .as("what fails, and what still works")
                                         .contains("a task does not support")
                                         .contains("-DskipTests")
+                                        .contains("skip themselves")
                                         .doesNotContain("-DskipITs");
                             });
         }
