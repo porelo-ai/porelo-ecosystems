@@ -1,9 +1,9 @@
 # EC08 — The Maven Plugin Published As A Recommended Package
 
-**Status:** Idea.
+**Status:** Implementing.
 **Size:** M - one package's metadata, a second format, and a publishing step in the workflow; Porelo's own package changes one line in each of its formats.
 
-**What must be true.** A person who installs Porelo from its package source gets the Maven plugin by default, in a package of its own, and can leave it out or remove it without touching Porelo. It is built and published after the first full operator test of the plugin, not before, and is not part of the interface's package.
+**What must be true.** A person who installs Porelo from its package source gets the Maven plugin by default, in a package of its own, and can leave it out or remove it without touching Porelo. It is not part of the interface's package.
 
 ## Plan
 
@@ -20,7 +20,7 @@ Red first: a package whose version does not move between two runs, or that does 
 
 ## Acceptance
 
-- On a clean Ubuntu 24.04 with Porelo's package source, `apt-get install porelo` installs the plugin, `porelo ecosystems` lists it, and `project init` on a Maven checkout recognizes it.
+- On a clean Ubuntu 24.04 with Porelo's package source, `apt-get install porelo` installs the plugin, `porelo ecosystems` lists it, and `project init` on a Maven checkout recognizes it; so does a first `task start`, once Porelo asks there.
 - `apt-get install --no-install-recommends porelo` leaves it out, and `apt-get remove porelo-ecosystem-maven` leaves Porelo installed; an upgrade does not bring it back.
 - The same on Fedora with `dnf`, and `--setopt=install_weak_deps=False` leaves it out.
 - The published index shows the exact version of a build.

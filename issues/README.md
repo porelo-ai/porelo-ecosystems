@@ -11,6 +11,12 @@ out.
 | <a id="ec01"></a>[EC01](EC01-A-Spike-Of-The-Model-Builder-In-A-Native-Image.md) | S | - | Whether MIMA serves the Maven plugin as a native image, by measurement: it does, and the bare model builder is proposed instead. |
 | <a id="ec03"></a>[EC03](EC03-The-Maven-Plugin-Behind-The-Contract.md) | M | - | The Maven plugin as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs. |
 
+## Implementing
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec08"></a>[EC08](EC08-The-Maven-Plugin-Published-As-A-Recommended-Package.md) | M | - | The Maven plugin published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
+
 ## Accepted
 
 | # | Size | Blocked by | What it covers |
@@ -24,7 +30,6 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec08"></a>[EC08](EC08-The-Maven-Plugin-Published-As-A-Recommended-Package.md) | M | - | The Maven plugin published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
 | <a id="ec09"></a>[EC09](EC09-A-Projects-Tools-Installed-In-The-Exact-Version.md) | M | - | What a project asks is installed in the exact version, found once when its file is made, as ordinary image lines fetching by URL and digest, with its paths set and GraalVM brought for a native build. |
 
 ## Finished
