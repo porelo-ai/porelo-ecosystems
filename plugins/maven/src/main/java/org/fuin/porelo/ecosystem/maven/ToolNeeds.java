@@ -7,14 +7,18 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
+import java.util.function.IntPredicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.maven.model.Build;
 import org.apache.maven.model.InputLocation;
@@ -51,15 +55,18 @@ final class ToolNeeds {
                     "com.spotify:dockerfile-maven-plugin", List.of("docker"));
     // The JDKs Ubuntu 24.04, Porelo's default image, packages, as measured; a JDK compiles older
     // releases.
+    private static final int HIGHEST_MAJOR = 9999;
+    private static final String JAVA_BEYOND_STATED = "java.unread";
     private static final List<Integer> PACKAGED_JDKS = List.of(8, 11, 17, 21, 25);
     private static final Pattern HEAP = Pattern.compile("-Xmx(\\d+)([kKmMgG]?)");
     private static final Pattern WRAPPED_MAVEN =
             Pattern.compile("apache-maven-(\\d[^/]*?)-bin\\.(?:zip|tar\\.gz)");
 
     private final Path checkout;
-    private @Nullable Finding java;
-    private int highestJava;
-    private final List<JavaNeed> javaNeeds = new ArrayList<>();
+
+    private record StatedJava(JavaNeed need, Place place, String source) {}
+
+    private final List<StatedJava> javaStated = new ArrayList<>();
     private @Nullable Finding javaUnknown;
     private @Nullable Finding maven;
     private boolean wrapperRuns;
@@ -92,9 +99,27 @@ final class ToolNeeds {
      */
     List<Finding> findings(boolean everyPomRead) {
         List<Finding> all = new ArrayList<>();
-        if (java != null) {
-            all.add(java);
-            all.add(jdkPackage(java, javaNeeds));
+        if (!javaStated.isEmpty()) {
+            all.addAll(javaAndItsPackage());
+            if (javaUnknown != null) {
+                all.add(
+                        new Finding(
+                                Finding.Part.TOOLS,
+                                JAVA_BEYOND_STATED,
+                                "",
+                                javaUnknown.file(),
+                                javaUnknown.line(),
+                                javaUnknown.origin(),
+                                true,
+                                javaUnknown.note()));
+            } else if (!everyPomRead) {
+                all.add(
+                        Answers.unknown(
+                                Finding.Part.TOOLS,
+                                JAVA_BEYOND_STATED,
+                                NOTHING_ASKED,
+                                "a pom that went unread may set a limit on the JDK as well"));
+            }
         } else if (javaUnknown != null) {
             all.add(javaUnknown);
         } else if (!everyPomRead) {
@@ -152,19 +177,65 @@ final class ToolNeeds {
         return all;
     }
 
-    private static Finding jdkPackage(Finding java, List<JavaNeed> needs) {
+    /** The Java asked for and its package, from all a build states together. */
+    private List<Finding> javaAndItsPackage() {
+        List<JavaNeed> needs = javaStated.stream().map(StatedJava::need).toList();
+        int floor = needs.stream().mapToInt(JavaNeed::lowest).max().orElse(0);
+        OptionalInt chosen = lowestMeeting(needs, floor);
+        if (chosen.isEmpty()) {
+            StatedJava highest =
+                    javaStated.stream()
+                            .max(Comparator.comparingInt(s -> s.need().lowest()))
+                            .orElseThrow();
+            Finding none =
+                    Answers.unknown(
+                            Finding.Part.TOOLS,
+                            "java.version",
+                            highest.place(),
+                            "no JDK meets " + statedBy(needs));
+            return floor == 0 ? List.of(none) : List.of(none, jdkPackage(none, floor, needs));
+        }
+        int major = chosen.getAsInt();
+        StatedJava binding =
+                javaStated.stream()
+                        .filter(s -> !s.need().allows(major - 1))
+                        .findFirst()
+                        .orElse(javaStated.get(0));
+        Finding java =
+                Answers.tool(
+                        "java.version",
+                        Integer.toString(major),
+                        binding.place(),
+                        "from " + binding.source());
+        return List.of(java, jdkPackage(java, major, needs));
+    }
+
+    // With no floor stated, what is packaged goes first; 7 for (,7] is still its answer.
+    private static OptionalInt lowestMeeting(List<JavaNeed> needs, int floor) {
+        IntPredicate meets = major -> needs.stream().allMatch(need -> need.allows(major));
+        if (floor > 0) {
+            return IntStream.rangeClosed(floor, HIGHEST_MAJOR).filter(meets).findFirst();
+        }
+        OptionalInt packaged =
+                PACKAGED_JDKS.stream().mapToInt(Integer::intValue).filter(meets).findFirst();
+        return packaged.isPresent()
+                ? packaged
+                : IntStream.rangeClosed(1, HIGHEST_MAJOR).filter(meets).max();
+    }
+
+    private static Finding jdkPackage(Finding asked, int major, List<JavaNeed> needs) {
         for (int packaged : PACKAGED_JDKS) {
             if (needs.stream().allMatch(need -> need.allows(packaged))) {
                 return beside(
-                        java,
+                        asked,
                         "openjdk-" + packaged + "-jdk-headless",
                         false,
                         "the lowest JDK packaged that meets " + statedBy(needs));
             }
         }
         return beside(
-                java,
-                "openjdk-" + java.value() + "-jdk-headless",
+                asked,
+                "openjdk-" + major + "-jdk-headless",
                 true,
                 "no JDK known to be packaged meets " + statedBy(needs));
     }
@@ -260,7 +331,8 @@ final class ToolNeeds {
     // The compiler's level names only the bytecode, so a build's enforcer can ask for a higher JDK.
     private void readJava(Model model, Places places) {
         readJavaLevel(model, places);
-        for (Xpp3Dom configuration : configurations(model, ENFORCER)) {
+        // What the build runs, as its effective model holds it: an overridden rule binds nothing.
+        for (Xpp3Dom configuration : usedConfigurations(model, ENFORCER)) {
             Xpp3Dom version = rule(configuration, "requireJavaVersion");
             if (version != null && version.getValue() != null) {
                 takeJava(version.getValue(), places.of(location(version)), "the enforcer's rule");
@@ -308,21 +380,17 @@ final class ToolNeeds {
                             source + " is written as " + written + ", which nothing read fills in");
             return;
         }
-        JavaNeed.of(written)
-                .ifPresent(
-                        need -> {
-                            javaNeeds.add(need);
-                            int lowest = need.lowest() == 0 ? PACKAGED_JDKS.get(0) : need.lowest();
-                            if (lowest > highestJava) {
-                                highestJava = lowest;
-                                java =
-                                        Answers.tool(
-                                                "java.version",
-                                                Integer.toString(lowest),
-                                                place,
-                                                "from " + source);
-                            }
-                        });
+        Optional<JavaNeed> need = JavaNeed.of(written);
+        if (need.isPresent()) {
+            javaStated.add(new StatedJava(need.get(), place, source));
+        } else {
+            javaUnknown =
+                    Answers.unknown(
+                            Finding.Part.TOOLS,
+                            "java.version",
+                            place,
+                            source + " is written as " + written + ", which names no version");
+        }
     }
 
     private void readMaven(Model model, Places places) {
@@ -465,16 +533,22 @@ final class ToolNeeds {
         if (used.isEmpty() && !mayBeUnlisted) {
             return List.of();
         }
-        return Stream.concat(used.stream(), managed)
-                .flatMap(
-                        plugin ->
-                                Stream.concat(
-                                        Stream.of(plugin.getConfiguration()),
-                                        plugin.getExecutions().stream()
-                                                .map(PluginExecution::getConfiguration)))
-                .filter(Xpp3Dom.class::isInstance)
-                .map(Xpp3Dom.class::cast)
+        return Stream.concat(used.stream(), managed).flatMap(ToolNeeds::settings).toList();
+    }
+
+    private static List<Xpp3Dom> usedConfigurations(Model model, String key) {
+        return used(model).stream()
+                .filter(p -> p.getKey().equals(key))
+                .flatMap(ToolNeeds::settings)
                 .toList();
+    }
+
+    private static Stream<Xpp3Dom> settings(Plugin plugin) {
+        return Stream.concat(
+                        Stream.of(plugin.getConfiguration()),
+                        plugin.getExecutions().stream().map(PluginExecution::getConfiguration))
+                .filter(Xpp3Dom.class::isInstance)
+                .map(Xpp3Dom.class::cast);
     }
 
     private static boolean pinsTheCompiler(Model model) {

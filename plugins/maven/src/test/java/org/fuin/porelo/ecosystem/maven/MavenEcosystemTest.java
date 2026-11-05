@@ -21,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class MavenEcosystemTest {
     @TempDir Path root;
@@ -363,8 +364,7 @@ class MavenEcosystemTest {
             "11, '[11,17)', 11",
             "11, '(,8],[21,)', 21",
             "8, '[11,16]', 11",
-            "17, '(17,)', 21",
-            "21, '[21]', 21"
+            "17, '(17,)', 17"
         })
         void theJdkMeetsTheCompilersLevelAndTheEnforcersRangeTogether(
                 String release, String range, String packaged) throws IOException {
@@ -375,10 +375,15 @@ class MavenEcosystemTest {
                             properties("maven.compiler.release", release) + requireJava(range)));
 
             assertThat(detect().findings())
-                    .extracting(Finding::key)
                     .as("a build that needs more than its bytecode's level stops at the enforcer")
-                    .filteredOn(key -> key.contains("-jdk"))
-                    .containsExactly("package.openjdk-" + packaged + "-jdk-headless");
+                    .filteredOn(x -> x.key().contains("-jdk"))
+                    .singleElement()
+                    .satisfies(
+                            x -> {
+                                assertThat(x.key())
+                                        .isEqualTo("package.openjdk-" + packaged + "-jdk-headless");
+                                assertThat(x.unknown()).as("it is packaged").isFalse();
+                            });
         }
 
         @Test
@@ -395,7 +400,17 @@ class MavenEcosystemTest {
         }
 
         @ParameterizedTest
-        @CsvSource({"21, '[11,17)', 21", "8, '[18,20]', 18", "8, '(,7]', 8"})
+        @CsvSource({
+            "21, '[11,17)', 21",
+            "8, '[18,20]', 18",
+            "8, '(,7]', 8",
+            "21, '[17,21.0)', 21",
+            "21, '[17,21.0.0)', 21",
+            "21, '[21]', 21",
+            "25, '[21,25]', 25",
+            "25, '[21,25.0.1)', 25",
+            "8, '(,1.8.0)', 8"
+        })
         void limitsNoPackagedJdkMeetsAreUnknownAndNeverGuessed(
                 String release, String range, String named) throws IOException {
             f.pom(
@@ -407,6 +422,118 @@ class MavenEcosystemTest {
             assertThat(only("package.openjdk-" + named + "-jdk-headless").unknown())
                     .as("a JDK outside the range stops the build, however it is chosen")
                     .isTrue();
+        }
+
+        @Test
+        void limitsThatContradictEachOtherAnswerNoJavaAsKnown() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            properties("maven.compiler.release", "21") + requireJava("[11,17)")));
+
+            assertThat(only("java.version").unknown())
+                    .as("no JDK at all meets both, so none may read as asked for")
+                    .isTrue();
+        }
+
+        @Test
+        void aRangeWithAGapAnswersTheJavaItReallyAllows() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            properties("maven.compiler.release", "11")
+                                    + requireJava("(,8],[21,)")));
+
+            assertThat(only("java.version").value()).as("11 falls in the gap").isEqualTo("21");
+        }
+
+        @Test
+        void aRuleOnlyAllowingBelowThePackagedOnesInstallsNoneOfThem() throws IOException {
+            f.pom("pom.xml", project("child", requireJava("(,7]")));
+
+            assertThat(detect().findings())
+                    .as("8 is what the rule forbids")
+                    .filteredOn(x -> x.key().contains("-jdk"))
+                    .singleElement()
+                    .satisfies(x -> assertThat(x.unknown()).isTrue());
+        }
+
+        @Test
+        void aRuleTheBuildOverridesCountsAsItsOverride() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                            <build>
+                              <pluginManagement><plugins><plugin>
+                                <groupId>org.apache.maven.plugins</groupId>
+                                <artifactId>maven-enforcer-plugin</artifactId>
+                                <configuration><rules><requireJavaVersion>
+                                  <version>[17,18)</version>
+                                </requireJavaVersion></rules></configuration>
+                              </plugin></plugins></pluginManagement>
+                              <plugins><plugin>
+                                <groupId>org.apache.maven.plugins</groupId>
+                                <artifactId>maven-enforcer-plugin</artifactId>
+                                <configuration><rules><requireJavaVersion>
+                                  <version>21</version>
+                                </requireJavaVersion></rules></configuration>
+                              </plugin></plugins>
+                            </build>
+                            """));
+
+            assertThat(only("package.openjdk-21-jdk-headless").unknown())
+                    .as("only the rule the build runs binds it")
+                    .isFalse();
+        }
+
+        @Test
+        void theModuleThatDecidesTheJavaIsTheOneNamed() throws IOException {
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    properties("maven.compiler.release", "11")
+                                            + "<modules><module>m</module></modules>"))
+                    .pom("m/pom.xml", project("m", requireJava("(,8],[21,)")));
+
+            assertThat(only("java.version").file())
+                    .as("a person looks where the limit stands")
+                    .isEqualTo("m/pom.xml");
+            assertThat(only("package.openjdk-21-jdk-headless").file()).isEqualTo("m/pom.xml");
+        }
+
+        @Test
+        void aPomThatWentUnreadIsNamedBesideAKnownLevel() throws IOException {
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    properties("maven.compiler.release", "17")
+                                            + "<modules><module>m</module></modules>"))
+                    .pom("m/pom.xml", "<project><broken");
+
+            assertThat(only("java.unread").note())
+                    .as("it may set a limit the JDK chosen does not meet")
+                    .contains("went unread");
+        }
+
+        @Test
+        void aRuleNothingFillsInBesideAKnownLevelIsStillNamed() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            properties("maven.compiler.release", "17")
+                                    + requireJava("${env.JDK}")));
+
+            assertThat(only("java.version").value()).as("what is known stays").isEqualTo("17");
+            assertThat(only("java.unread").note())
+                    .as("the JDK chosen may still be too low")
+                    .contains("${env.JDK}");
         }
 
         @Test
@@ -425,24 +552,36 @@ class MavenEcosystemTest {
         }
 
         @ParameterizedTest
-        @CsvSource({"99999999999999999999", "'[99999999999999999999,)'", "not a version", "'[,'"})
-        void aVersionNoNumberFitsGetsAnAnswerNotACrash(String written) throws IOException {
-            f.pom("pom.xml", project("child", requireJava(written)));
+        @ValueSource(strings = {"(,17]", "[,]", "(,)"})
+        void anOpenStartTakesTheLowestPackagedInTheRange(String range) throws IOException {
+            f.pom("pom.xml", project("child", requireJava(range)));
 
-            assertThat(detect().findings())
-                    .as("a broken pom gets an answer")
-                    .anyMatch(x -> x.key().contains("-jdk"));
+            assertThat(only("package.openjdk-8-jdk-headless").unknown())
+                    .as("nothing asks for more, and it is packaged")
+                    .isFalse();
         }
 
-        @Test
-        void anOpenStartTakesTheLowestPackagedInTheRange() throws IOException {
-            f.pom("pom.xml", project("child", requireJava("(,17]")));
+        @ParameterizedTest
+        @CsvSource({
+            "99999999999999999999",
+            "'[99999999999999999999,)'",
+            "not a version",
+            "'[,'",
+            "'[not-a-version]'",
+            "'[foo,17]'",
+            "'[17,foo]'",
+            "'[21,17]'",
+            "'[17,17)'"
+        })
+        void aVersionThatNamesNoJdkIsUnknownAndNeverGuessed(String written) throws IOException {
+            f.pom("pom.xml", project("child", requireJava(written)));
 
+            assertThat(only("java.version").unknown())
+                    .as("neither a crash nor a default JDK that reads as asked for")
+                    .isTrue();
             assertThat(detect().findings())
-                    .extracting(Finding::key)
-                    .as("nothing asks for more")
-                    .filteredOn(key -> key.contains("-jdk"))
-                    .containsExactly("package.openjdk-8-jdk-headless");
+                    .as("no JDK is named on a value that names none")
+                    .noneMatch(x -> x.key().contains("-jdk"));
         }
 
         private static String requireJava(String range) {
