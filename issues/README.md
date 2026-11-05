@@ -13,6 +13,12 @@ out.
 | <a id="ec03"></a>[EC03](EC03-The-Maven-Plugin-Behind-The-Contract.md) | M | - | The Maven plugin as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs. |
 | <a id="ec10"></a>[EC10](EC10-The-Reason-A-Plugin-Has-Nothing-To-Secure.md) | XS | - | The rule that a plugin has nothing to secure says its real reason: the plugin runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control. |
 
+## Implementing
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec13"></a>[EC13](EC13-The-Maven-Adapter-Judged-By-Real-Builds.md) | L | - | The Maven adapter judged by whether a real build runs in a real task, on a corpus of open source projects, with each fault fixed in the Java code alone. |
+
 ## Backlog
 
 | # | Size | Blocked by | What it covers |
