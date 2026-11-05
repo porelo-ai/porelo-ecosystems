@@ -51,7 +51,6 @@ Built with `-Pnative verify` on the pinned GraalVM, read and installed in clean 
 
 ## To be checked
 
-- The publishing steps' upload, which runs only on the first push to `main`; that needs this repository's access to `JF_ACCESS_TOKEN`, `JF_URL` and `PORELO_PUBLISH`, which an agent's token cannot read.
 - The acceptance above against the published index, on Ubuntu and on Fedora, once Porelo's package names this one under `Recommends`.
 - What dnf does with a weak dependency: read, not measured.
 - Whether the setup script should offer leaving the plugin out: it installs with recommendations on and has no such option, so its users remove the package afterward.
