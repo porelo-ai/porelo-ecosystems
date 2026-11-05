@@ -1,7 +1,7 @@
 # EC09 — A Project's Tools Installed In The Exact Version
 
-**Status:** Idea.
-**Size:** M - the online step, its answer as lines and values, their tests; it changes a contract, and the image builder needs no new stage.
+**Status:** Implementing.
+**Size:** L - the online step, its answer as lines and values, their tests; it changes a contract, so it crosses into Porelo, and the image builder needs no new stage.
 
 **What must be true.** What a project asks is installed in the exact version: the JDK, Maven and any other recognized tool, so that a distribution's packages no longer decide it and a pom asking Maven 3.9 no longer meets 3.8.7.
 
