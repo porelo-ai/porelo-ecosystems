@@ -22,7 +22,7 @@ Red first: a package whose version does not move between two runs, or that does 
 
 - On a clean Ubuntu 26.04 with Porelo's package source, `apt-get install porelo` installs the plugin, `porelo ecosystems` lists it, and `project init` on a Maven checkout recognizes it; so does a first `task start`, once Porelo asks there.
 - `apt-get install --no-install-recommends porelo` leaves it out, and `apt-get remove porelo-ecosystem-maven` leaves Porelo installed; an upgrade does not bring it back.
-- On Fedora, `dnf install porelo porelo-ecosystem-maven`, as Porelo's getting-started page says, installs it, `porelo ecosystems` lists it, and `project init` on a Maven checkout recognizes it; `rpm -e porelo-ecosystem-maven` leaves Porelo installed. That page says so for Fedora, with why.
+- On Fedora against `snapshots`, `dnf install porelo porelo-ecosystem-maven`, as Porelo's getting-started page says for that channel, installs it, `porelo ecosystems` lists it, and `project init` on a Maven checkout recognizes it; `rpm -e porelo-ecosystem-maven` leaves Porelo installed. That page says why it is named, and that the plugin is in `snapshots` only until a release publishes it.
 - The published index shows the exact version of a build.
 
 ## What apt does, measured
@@ -62,7 +62,7 @@ Against the published snapshots, in clean containers, with `porelo` 0.5.1~snapsh
 
 ## To be checked
 
-- That Porelo's getting-started page names the plugin for Fedora.
+- That Porelo's getting-started page says this for Fedora, once it is published.
 - `apt-get upgrade` after removing the plugin, against a real next build instead of the stand-in.
 - A first `task start` on a Maven checkout, once Porelo asks there.
 - Whether the setup script should offer leaving the plugin out: it installs with recommendations on and has no such option, so its users remove the package afterward.
