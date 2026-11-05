@@ -1,0 +1,2 @@
+title: The Maven plugin warns of a build that starts containers, which a task does not support, by Testcontainers or a Docker or Kubernetes plugin, and no longer proposes the `docker` package.
+type: changed

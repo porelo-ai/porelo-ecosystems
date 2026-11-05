@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 import org.fuin.porelo.ecosystem.api.Detection;
 import org.fuin.porelo.ecosystem.api.Ecosystem;
 import org.fuin.porelo.ecosystem.api.EcosystemMain;
@@ -37,9 +38,17 @@ public final class MavenEcosystem implements Ecosystem {
     @Override
     public Detection detect(Path directory, Path home) {
         ToolNeeds needs = new ToolNeeds(directory.toAbsolutePath());
+        ContainerUse containers = new ContainerUse();
         RepositoryHostsAnswer answer;
         try {
-            answer = RepositoryHosts.read(directory, home, needs::read);
+            answer =
+                    RepositoryHosts.read(
+                            directory,
+                            home,
+                            (model, places) -> {
+                                needs.read(model, places);
+                                containers.read(model, places);
+                            });
         } catch (NotAMavenCheckoutException e) {
             throw new EcosystemRefused(EcosystemRefused.Reason.NOT_RECOGNIZED, "");
         } catch (IOException e) {
@@ -51,7 +60,10 @@ public final class MavenEcosystem implements Ecosystem {
         answer.unknowns().forEach(unknown -> findings.add(ofUnknown(unknown)));
         return new Detection(
                 findings.stream().distinct().toList(),
-                answer.unplaced().stream().map(MavenEcosystem::ofUnplaced).distinct().toList());
+                Stream.concat(answer.unplaced().stream(), containers.unplaced().stream())
+                        .map(MavenEcosystem::ofUnplaced)
+                        .distinct()
+                        .toList());
     }
 
     @Override

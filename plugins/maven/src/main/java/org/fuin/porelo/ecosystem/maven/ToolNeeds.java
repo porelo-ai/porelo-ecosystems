@@ -50,9 +50,7 @@ final class ToolNeeds {
                     "org.apache.maven.plugins:maven-gpg-plugin", List.of("gnupg"),
                     "io.github.git-commit-id:git-commit-id-maven-plugin", List.of("git"),
                     "pl.project13.maven:git-commit-id-plugin", List.of("git"),
-                    "org.codehaus.mojo:buildnumber-maven-plugin", List.of("git"),
-                    "io.fabric8:docker-maven-plugin", List.of("docker"),
-                    "com.spotify:dockerfile-maven-plugin", List.of("docker"));
+                    "org.codehaus.mojo:buildnumber-maven-plugin", List.of("git"));
     // The JDKs Ubuntu 24.04, Porelo's default image, packages, as measured; a JDK compiles older
     // releases.
     private static final int HIGHEST_MAJOR = 9999;

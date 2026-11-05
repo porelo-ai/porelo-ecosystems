@@ -758,6 +758,176 @@ class MavenEcosystemTest {
         }
     }
 
+    /** Harm prevented: a person starts a task for a build that cannot run in one, unwarned. */
+    @Nested
+    class AContainerStartingBuild {
+        private static final String TESTCONTAINERS =
+                """
+                <dependencies><dependency>
+                  <groupId>org.testcontainers</groupId><artifactId>postgresql</artifactId>
+                  <version>1.20.0</version><scope>test</scope>
+                </dependency></dependencies>
+                """;
+
+        @Test
+        void testcontainersIsWarnedOfWithWhatStillWorks() throws IOException {
+            f.pom("pom.xml", project("child", TESTCONTAINERS));
+
+            assertThat(detect().unplaced())
+                    .as("the person reads it before starting, with where it stands")
+                    .singleElement()
+                    .satisfies(
+                            u -> {
+                                assertThat(u.file()).as("where it stands").isEqualTo("pom.xml");
+                                assertThat(u.line()).as("its line, not the pom's").isEqualTo(7);
+                                assertThat(u.note())
+                                        .as("what fails, and what still works")
+                                        .contains("a task does not support")
+                                        .contains("-DskipTests")
+                                        .doesNotContain("-DskipITs");
+                            });
+        }
+
+        @ParameterizedTest
+        @CsvSource({
+            "io.fabric8, docker-maven-plugin",
+            "com.spotify, dockerfile-maven-plugin",
+            "org.eclipse.jkube, kubernetes-maven-plugin",
+            "org.eclipse.jkube, openshift-maven-plugin",
+            "io.fabric8, fabric8-maven-plugin"
+        })
+        void aPluginThatStartsContainersIsWarnedOf(String group, String artifact)
+                throws IOException {
+            f.pom("pom.xml", project("child", plugin(group, artifact, "")));
+
+            assertThat(detect().unplaced())
+                    .as("its goals fail in a task")
+                    .singleElement()
+                    .satisfies(
+                            u -> {
+                                assertThat(u.note())
+                                        .as("it names what fails")
+                                        .contains(artifact)
+                                        .contains("a task does not support");
+                                assertThat(u.file()).as("where it stands").isEqualTo("pom.xml");
+                                assertThat(u.line()).as("its line, not the pom's").isEqualTo(7);
+                            });
+        }
+
+        @ParameterizedTest
+        @CsvSource({"io.fabric8, docker-maven-plugin", "com.spotify, dockerfile-maven-plugin"})
+        void noContainerClientIsInstalledWithNoDaemonToReach(String group, String artifact)
+                throws IOException {
+            f.pom("pom.xml", project("child", plugin(group, artifact, "")));
+
+            assertThat(detect().findings())
+                    .as("a client alone would look as if the build could run")
+                    .noneMatch(x -> x.key().equals("package.docker"));
+        }
+
+        @Test
+        void jibIsNotWarnedOfAsItNeedsNoDaemon() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project("child", plugin("com.google.cloud.tools", "jib-maven-plugin", "")));
+
+            assertThat(detect().unplaced()).as("it builds an image without one").isEmpty();
+        }
+
+        @Test
+        void aPluginOnlyManagedIsNotWarnedOf() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                            <build><pluginManagement><plugins><plugin>
+                              <groupId>io.fabric8</groupId><artifactId>docker-maven-plugin</artifactId>
+                            </plugin></plugins></pluginManagement></build>
+                            """));
+
+            assertThat(detect().unplaced()).as("no build runs it").isEmpty();
+        }
+
+        @Test
+        void aTestcontainersDependencyOnlyManagedIsNotWarnedOf() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            "<dependencyManagement>" + TESTCONTAINERS + "</dependencyManagement>"));
+
+            assertThat(detect().unplaced()).as("nothing uses it").isEmpty();
+        }
+
+        @Test
+        void aPomWarnsOnceHoweverManyArtifactsItHolds() throws IOException {
+            String dependencies =
+                    """
+                    <dependencies>
+                      <dependency><groupId>org.testcontainers</groupId><artifactId>a</artifactId>
+                        <version>1</version><scope>test</scope></dependency>
+                      <dependency><groupId>org.testcontainers</groupId><artifactId>b</artifactId>
+                        <version>1</version><scope>test</scope></dependency>
+                    </dependencies>
+                    """;
+            f.pom("pom.xml", project("child", "<modules><module>m</module></modules>"))
+                    .pom("m/pom.xml", project("m", dependencies));
+
+            assertThat(detect().unplaced())
+                    .as("one line per pom, not one per artifact")
+                    .singleElement()
+                    .satisfies(u -> assertThat(u.file()).as("the pom").isEqualTo("m/pom.xml"));
+        }
+
+        @Test
+        void aModuleWithItsOwnIsNamedBesideWhatItInherits() throws IOException {
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    "<modules><module>m</module></modules>" + TESTCONTAINERS))
+                    .pom(
+                            "m/pom.xml",
+                            """
+                            <project>
+                              <modelVersion>4.0.0</modelVersion>
+                              <parent>
+                                <groupId>org.example</groupId><artifactId>child</artifactId>
+                                <version>1</version>
+                              </parent>
+                              <artifactId>m</artifactId>
+                              <dependencies><dependency>
+                                <groupId>org.testcontainers</groupId><artifactId>kafka</artifactId>
+                                <version>1</version><scope>test</scope>
+                              </dependency></dependencies>
+                            </project>
+                            """);
+
+            assertThat(detect().unplaced())
+                    .as("the inherited one comes first and must not hide the module's own")
+                    .extracting(u -> u.file())
+                    .containsExactlyInAnyOrder("pom.xml", "m/pom.xml");
+        }
+
+        @Test
+        void aBomStartsNothing() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                            <dependencies><dependency>
+                              <groupId>org.testcontainers</groupId>
+                              <artifactId>testcontainers-bom</artifactId>
+                              <version>1</version><type>pom</type><scope>test</scope>
+                            </dependency></dependencies>
+                            """));
+
+            assertThat(detect().unplaced()).as("it only names versions").isEmpty();
+        }
+    }
+
     /** Harm prevented: a build runs out of memory in a box sized without asking it. */
     @Nested
     class Memory {
