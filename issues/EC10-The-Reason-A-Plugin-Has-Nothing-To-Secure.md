@@ -1,6 +1,6 @@
 # EC10 — The Reason A Plugin Has Nothing To Secure
 
-**Status:** Implementing.
+**Status:** Review.
 **Size:** XS - the wording of one rule and of the decision behind it; no code.
 
 **What must be true.** Whoever reads the rule that a plugin has nothing to secure finds the reason that holds when a plugin runs on a checkout just cloned, before the person has said anything: the plugin runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control.

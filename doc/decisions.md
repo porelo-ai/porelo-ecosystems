@@ -4,12 +4,12 @@ The choices the build-tool plugins are built on, each with why it holds.
 
 | Subject | What holds | Link |
 |---|---|---|
-| A plugin has nothing to secure | it aims at the hosts the real build would reach, each with its file and line; no project code runs, no password appears, and a broken or huge pom gets an answer, not a crash | [entry](#a-plugin-has-nothing-to-secure) |
+| A plugin has nothing to secure | it runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control; so it aims at the hosts the real build would reach, each with its file and line, no password appears, and a broken or huge pom gets an answer, not a crash | [entry](#a-plugin-has-nothing-to-secure) |
 | The Maven answer follows real Maven | where Maven's behavior is not obvious, the answer does what real Maven was measured doing; what stays out of it is named | [entry](#the-maven-answer-follows-real-maven) |
 
 ## A plugin has nothing to secure
 
-Porelo runs on the developer's machine. A setting in the settings or the project that is a problem is one without Porelo too, and Porelo makes it no worse. A plugin's task is to make the developer's start easier by reading what the build would use.
+A plugin may run on a checkout just cloned, before the person has said anything. It runs no code of the project and stays bounded, by its limits on what it reads and by Porelo's limit on each call. Porelo treats its answer as untrusted input, and nothing in that answer takes effect until the person has read it and confirmed it: the confirmation is the control, not the plugin. A plugin's task is to make the developer's start easier by reading what the build would use.
 
 So the aim is the right answer: the same hosts the developer's real build would reach, each with its file and line. A finding against a plugin is a wrong answer, never a security finding, and no hostile checkout is hardened against.
 

@@ -482,9 +482,10 @@ no build tool. What a plugin answers becomes a tools draft and a rules draft for
 
 - **A plugin never runs the project's code**: no build tool, no wrapper, no build script, no Maven core extension, no
   plugin of the project's. It reads files and the models built from them.
-- **A plugin has nothing to secure.** It runs on the machine where the developer starts Porelo, and aims at the right
-  answer: the hosts the real build would reach. What the build reads is input to the answer; no hostile checkout is
-  hardened against, and a finding against a plugin is a wrong answer, never a security finding.
+- **A plugin has nothing to secure, because it is not the control.** It runs no code of the project and stays bounded,
+  also on a checkout just cloned; its answer is untrusted input to Porelo, and the person's confirmation is the control.
+  So it aims at the right answer: the hosts the real build would reach. What the build reads is input to the answer; no
+  hostile checkout is hardened against, and a finding against a plugin is a wrong answer, never a security finding.
 - **A plugin reaches no network while it reads a checkout or the person's settings.** What the build would fetch is read
   from the person's local caches only; a value that sits in something not found there is named as unknown, with where it
   is set, never guessed.
