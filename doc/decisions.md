@@ -5,6 +5,7 @@ The choices the build-tool plugins are built on, each with why it holds.
 | Subject | What holds | Link |
 |---|---|---|
 | A plugin has nothing to secure | it runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control; so it aims at the hosts the real build would reach, each with its file and line, no password appears, and a broken or huge pom gets an answer, not a crash | [entry](#a-plugin-has-nothing-to-secure) |
+| An adapter is judged by real builds | open source projects, by a plain clone at pinned commits, must build in a real task from the file Porelo's own first start writes, with only the adapter's code fixed | [entry](#an-adapter-is-judged-by-real-builds) |
 | The Maven answer follows real Maven | where Maven's behavior is not obvious, the answer does what real Maven was measured doing; what stays out of it is named | [entry](#the-maven-answer-follows-real-maven) |
 
 ## A plugin has nothing to secure
@@ -22,6 +23,20 @@ The real build runs in the box, so what the box decides is an unknown naming it:
 Three things stay: no code of the project runs, no password appears in an answer, and a broken or huge pom gets an answer rather than a crash.
 
 The decision is about what a plugin answers. It says nothing of the agent's box and its egress.
+
+## An adapter is judged by real builds
+
+Unit tests show that an adapter reads what it was written to read. Whether its answer is enough shows only when the tool's real build runs in a real task from that answer, so every adapter is tested this way, each with its own list of projects.
+
+- **The projects:** about ten open source ones of the tool, small libraries, large ones, an application, one using the tool's extension mechanism and one with a package source of its own. Each comes to disk by a plain `git clone` of its public address, at a pinned commit, and nothing else is set up.
+- **A reference first:** the project's build without Porelo, at that commit. A project broken by itself, or needing a container engine or a browser, is not counted against the adapter. The reference also fills the account's caches, as a person's own earlier build would; the empty case runs once per project and is reported apart.
+- **The file comes from Porelo's real first start:** the question and the yes on the daemon, with the adapter's code answering. No script writes it and nobody edits it.
+- **A task with the stub agent:** the tool's real build runs by `podman exec`, in the same network and firewall as an agent. The environment of `podman exec` is compared first with the agent session's, and the build runs the way the session has it. Without tests as the first stage, with tests after.
+- **Failures are sorted by the firewall's log:** a refused host, a wrong tool version or a missing tool is the adapter's. A test needing a service is not.
+- **Only the adapter's code is fixed,** each fault with a test seen to fail first, and the build runs again from a newly written file. No handwork, no edited file, no workaround, and no rule for one project or by a project's name: only what the repository says.
+- **About a third of the projects are held back** and run only at the end, their result stated apart.
+- **"Not recognizable" is a result:** what a reader cannot know offline, such as a host a test asks for at run time, gets no fix and is written down.
+- **A real agent comes last,** on about two projects, with a cheap model and the words "build the project". It stays out of the corpus, since an agent may work around what should fail.
 
 ## The Maven answer follows real Maven
 
