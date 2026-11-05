@@ -1,5 +1,7 @@
 package org.fuin.porelo.ecosystem.maven;
 
+import static java.util.stream.Collectors.joining;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -50,7 +52,6 @@ final class ToolNeeds {
     // The JDKs Ubuntu 24.04, Porelo's default image, packages, as measured; a JDK compiles older
     // releases.
     private static final List<Integer> PACKAGED_JDKS = List.of(8, 11, 17, 21, 25);
-    private static final Pattern FIRST_VERSION = Pattern.compile("(\\d+)(?:\\.(\\d+))?");
     private static final Pattern HEAP = Pattern.compile("-Xmx(\\d+)([kKmMgG]?)");
     private static final Pattern WRAPPED_MAVEN =
             Pattern.compile("apache-maven-(\\d[^/]*?)-bin\\.(?:zip|tar\\.gz)");
@@ -58,6 +59,7 @@ final class ToolNeeds {
     private final Path checkout;
     private @Nullable Finding java;
     private int highestJava;
+    private final List<JavaNeed> javaNeeds = new ArrayList<>();
     private @Nullable Finding javaUnknown;
     private @Nullable Finding maven;
     private boolean wrapperRuns;
@@ -92,7 +94,7 @@ final class ToolNeeds {
         List<Finding> all = new ArrayList<>();
         if (java != null) {
             all.add(java);
-            all.add(jdkPackage(java));
+            all.add(jdkPackage(java, javaNeeds));
         } else if (javaUnknown != null) {
             all.add(javaUnknown);
         } else if (!everyPomRead) {
@@ -150,22 +152,25 @@ final class ToolNeeds {
         return all;
     }
 
-    private static Finding jdkPackage(Finding java) {
-        int release = Integer.parseInt(java.value());
+    private static Finding jdkPackage(Finding java, List<JavaNeed> needs) {
         for (int packaged : PACKAGED_JDKS) {
-            if (packaged >= release) {
+            if (needs.stream().allMatch(need -> need.allows(packaged))) {
                 return beside(
                         java,
                         "openjdk-" + packaged + "-jdk-headless",
                         false,
-                        "the lowest JDK packaged that compiles Java " + release);
+                        "the lowest JDK packaged that meets " + statedBy(needs));
             }
         }
         return beside(
                 java,
-                "openjdk-" + release + "-jdk-headless",
+                "openjdk-" + java.value() + "-jdk-headless",
                 true,
-                "no JDK known to be packaged compiles Java " + release);
+                "no JDK known to be packaged meets " + statedBy(needs));
+    }
+
+    private static String statedBy(List<JavaNeed> needs) {
+        return needs.stream().map(JavaNeed::written).distinct().collect(joining(" and "));
     }
 
     // The package stands where what asks for it stands, so a person reads both in one place.
@@ -252,7 +257,18 @@ final class ToolNeeds {
         }
     }
 
+    // The compiler's level names only the bytecode, so a build's enforcer can ask for a higher JDK.
     private void readJava(Model model, Places places) {
+        readJavaLevel(model, places);
+        for (Xpp3Dom configuration : configurations(model, ENFORCER)) {
+            Xpp3Dom version = rule(configuration, "requireJavaVersion");
+            if (version != null && version.getValue() != null) {
+                takeJava(version.getValue(), places.of(location(version)), "the enforcer's rule");
+            }
+        }
+    }
+
+    private void readJavaLevel(Model model, Places places) {
         boolean found = false;
         for (Xpp3Dom configuration : configurations(model, COMPILER)) {
             for (String name : List.of("release", "target", "source")) {
@@ -279,13 +295,6 @@ final class ToolNeeds {
                 return;
             }
         }
-        for (Xpp3Dom configuration : configurations(model, ENFORCER)) {
-            Xpp3Dom version = rule(configuration, "requireJavaVersion");
-            if (version != null && version.getValue() != null) {
-                takeJava(version.getValue(), places.of(location(version)), "the enforcer's rule");
-                return;
-            }
-        }
     }
 
     // The highest of all modules: that JDK builds them all, and a lower one does not.
@@ -299,18 +308,21 @@ final class ToolNeeds {
                             source + " is written as " + written + ", which nothing read fills in");
             return;
         }
-        Matcher first = FIRST_VERSION.matcher(written);
-        if (!first.find()) {
-            return;
-        }
-        int version = Integer.parseInt(first.group(1));
-        // 1.8 is Java 8.
-        int major =
-                version == 1 && first.group(2) != null ? Integer.parseInt(first.group(2)) : version;
-        if (major > highestJava) {
-            highestJava = major;
-            java = Answers.tool("java.version", Integer.toString(major), place, "from " + source);
-        }
+        JavaNeed.of(written)
+                .ifPresent(
+                        need -> {
+                            javaNeeds.add(need);
+                            int lowest = need.lowest() == 0 ? PACKAGED_JDKS.get(0) : need.lowest();
+                            if (lowest > highestJava) {
+                                highestJava = lowest;
+                                java =
+                                        Answers.tool(
+                                                "java.version",
+                                                Integer.toString(lowest),
+                                                place,
+                                                "from " + source);
+                            }
+                        });
     }
 
     private void readMaven(Model model, Places places) {
