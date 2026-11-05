@@ -22,7 +22,7 @@ Red first: a package whose version does not move between two runs, or that does 
 
 - On a clean Ubuntu 26.04 with Porelo's package source, `apt-get install porelo` installs the plugin, `porelo ecosystems` lists it, and `project init` on a Maven checkout recognizes it; so does a first `task start`, once Porelo asks there.
 - `apt-get install --no-install-recommends porelo` leaves it out, and `apt-get remove porelo-ecosystem-maven` leaves Porelo installed; an upgrade does not bring it back.
-- The same on Fedora with `dnf`, and `--setopt=install_weak_deps=False` leaves it out.
+- On Fedora, `dnf install porelo porelo-ecosystem-maven`, as Porelo's getting-started page says, installs it, `porelo ecosystems` lists it, and `project init` on a Maven checkout recognizes it; `rpm -e porelo-ecosystem-maven` leaves Porelo installed. That page says so for Fedora, with why.
 - The published index shows the exact version of a build.
 
 ## What apt does, measured
@@ -52,9 +52,9 @@ Against the published snapshots, in clean containers, with `porelo` 0.5.1~snapsh
 - **Ubuntu 26.04:** `apt-get install porelo` brings the plugin, `porelo ecosystems` lists it, and `project init --json` on a Maven checkout answers with its hosts and JDK. `--no-install-recommends` leaves it out. `apt-get remove porelo-ecosystem-maven` leaves Porelo, and reinstalling Porelo does not bring it back.
 - **The upgrade on Ubuntu 26.04:** a stand-in, the same package as version .406 in a local source: after the plugin was removed, `apt-get upgrade` moved Porelo and did not bring it back. A `dist-upgrade` from .404, whose package does not yet recommend it, does bring it, as the first upgrade to a version adding a `Recommends` does.
 - **Ubuntu 24.04:** `apt-get install porelo` fails: Porelo depends on podman 5 and that release has 4.9.3. It is not a supported release.
-- **Fedora 44: the plugin does not come with a default `dnf install porelo`,** so this acceptance is not met there. The `.rpm` names it under `Recommends`, but the published RPM index holds an empty `recommends` for all of its 489 packages, and `dnf repoquery --recommends` answers nothing. Porelo's message filter is left out the same way.
+- **Fedora 44: the plugin does not come with a default `dnf install porelo`,** so a Fedora install names it. The `.rpm` names it under `Recommends`, but the published RPM index holds an empty `recommends` for all of its 489 packages, and `dnf repoquery --recommends` answers nothing. Porelo's message filter is left out the same way.
 - **The cause, on Fedora 44:** the same two `.rpm` files in a local source indexed by `createrepo_c` bring the plugin with a default `dnf install porelo`. So the index loses it, not the package.
-- **The rest on Fedora 44:** `install_weak_deps=False` leaves it out, though that proves nothing while the index names no recommendation. Installed by name, `porelo ecosystems` lists it and `project init --json` answers the same. `rpm -e` of the plugin leaves Porelo.
+- **The rest on Fedora 44:** installed by name, `porelo ecosystems` lists it and `project init --json` answers the same. `rpm -e` of the plugin leaves Porelo.
 
 ## Decided while building
 
@@ -62,7 +62,7 @@ Against the published snapshots, in clean containers, with `porelo` 0.5.1~snapsh
 
 ## To be checked
 
-- How a Fedora install gets the plugin, since the published RPM index does not carry a `Recommends`. Once it does: the default install, `install_weak_deps=False` and an upgrade after removing the plugin, on Fedora.
+- That Porelo's getting-started page names the plugin for Fedora.
 - `apt-get upgrade` after removing the plugin, against a real next build instead of the stand-in.
 - A first `task start` on a Maven checkout, once Porelo asks there.
 - Whether the setup script should offer leaving the plugin out: it installs with recommendations on and has no such option, so its users remove the package afterward.
