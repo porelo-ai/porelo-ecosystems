@@ -329,10 +329,14 @@ final class ToolNeeds {
     // The compiler's level names only the bytecode, so a build's enforcer can ask for a higher JDK.
     private void readJava(Model model, Places places) {
         readJavaLevel(model, places);
-        // What the build runs, as its effective model holds it: an overridden rule binds nothing.
-        for (Xpp3Dom configuration : usedConfigurations(model, ENFORCER)) {
-            Xpp3Dom version = rule(configuration, "requireJavaVersion");
-            if (version != null && version.getValue() != null) {
+        // What the build runs: the model read holds pluginManagement apart, so a rule stated in the
+        // plugin itself overrides a managed one, and a managed one binds a plugin stating none.
+        List<Xpp3Dom> stated = rules(usedConfigurations(model, ENFORCER));
+        if (stated.isEmpty() && !usedConfigurationsAbsent(model, ENFORCER)) {
+            stated = rules(managedConfigurations(model, ENFORCER));
+        }
+        for (Xpp3Dom version : stated) {
+            if (version.getValue() != null) {
                 takeJava(version.getValue(), places.of(location(version)), "the enforcer's rule");
             }
         }
@@ -534,6 +538,28 @@ final class ToolNeeds {
         return Stream.concat(used.stream(), managed).flatMap(ToolNeeds::settings).toList();
     }
 
+    private static List<Xpp3Dom> rules(List<Xpp3Dom> configurations) {
+        return configurations.stream()
+                .map(configuration -> rule(configuration, "requireJavaVersion"))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
+    private static boolean usedConfigurationsAbsent(Model model, String key) {
+        return used(model).stream().noneMatch(p -> p.getKey().equals(key));
+    }
+
+    private static List<Xpp3Dom> managedConfigurations(Model model, String key) {
+        Build build = model.getBuild();
+        if (build == null || build.getPluginManagement() == null) {
+            return List.of();
+        }
+        return build.getPluginManagement().getPlugins().stream()
+                .filter(p -> p.getKey().equals(key))
+                .flatMap(ToolNeeds::settings)
+                .toList();
+    }
+
     private static List<Xpp3Dom> usedConfigurations(Model model, String key) {
         return used(model).stream()
                 .filter(p -> p.getKey().equals(key))
@@ -541,7 +567,7 @@ final class ToolNeeds {
                 .toList();
     }
 
-    private static Stream<Xpp3Dom> settings(Plugin plugin) {
+    static Stream<Xpp3Dom> settings(Plugin plugin) {
         return Stream.concat(
                         Stream.of(plugin.getConfiguration()),
                         plugin.getExecutions().stream().map(PluginExecution::getConfiguration))
@@ -572,7 +598,7 @@ final class ToolNeeds {
         return rule == null ? null : rule.getChild("version");
     }
 
-    private static @Nullable InputLocation location(Xpp3Dom element) {
+    static @Nullable InputLocation location(Xpp3Dom element) {
         return element.getInputLocation() instanceof InputLocation location
                 ? Objects.requireNonNull(location)
                 : null;

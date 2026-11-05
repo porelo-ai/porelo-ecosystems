@@ -239,7 +239,13 @@ public final class RepositoryHosts {
         if (model.getBuild() != null) {
             model.getBuild().getExtensions().forEach(this::nameExtension);
             PluginManagement managed = model.getBuild().getPluginManagement();
-            model.getBuild().getPlugins().forEach(plugin -> answerPlugin(plugin, managed));
+            model.getBuild()
+                    .getPlugins()
+                    .forEach(
+                            plugin -> {
+                                answerPlugin(plugin, managed);
+                                answerWhatItReaches(plugin, managed);
+                            });
         }
         result.getModelIds().stream()
                 .map(result::getRawModel)
@@ -250,6 +256,26 @@ public final class RepositoryHosts {
                 .filter(Objects::nonNull)
                 .map(BuildBase::getPlugins)
                 .forEach(plugins -> plugins.forEach(plugin -> answerPlugin(plugin, null)));
+    }
+
+    private void answerWhatItReaches(Plugin plugin, @Nullable PluginManagement managed) {
+        for (PluginHosts.Reached reached : PluginHosts.of(plugin, managed)) {
+            Place place = places.of(reached.location());
+            String id = plugin.getArtifactId();
+            if (!holdsExpression(reached.url(), place, id)) {
+                hostUrl(reached.url(), id, place)
+                        .ifPresent(
+                                host ->
+                                        hosts.add(
+                                                new RepositoryHost(
+                                                        id,
+                                                        host.host(),
+                                                        host.url(),
+                                                        RepositoryHost.Kind.PLUGIN_REACHES,
+                                                        place,
+                                                        new ServerReference(id, false, place))));
+            }
+        }
     }
 
     private void nameExtension(Extension extension) {

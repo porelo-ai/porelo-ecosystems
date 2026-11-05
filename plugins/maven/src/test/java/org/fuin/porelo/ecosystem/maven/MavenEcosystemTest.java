@@ -522,6 +522,33 @@ class MavenEcosystemTest {
         }
 
         @Test
+        void aRuleOnlyManagedBindsAPluginTheBuildRuns() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                            <build>
+                              <pluginManagement><plugins><plugin>
+                                <groupId>org.apache.maven.plugins</groupId>
+                                <artifactId>maven-enforcer-plugin</artifactId>
+                                <configuration><rules><requireJavaVersion>
+                                  <version>21</version>
+                                </requireJavaVersion></rules></configuration>
+                              </plugin></plugins></pluginManagement>
+                              <plugins><plugin>
+                                <groupId>org.apache.maven.plugins</groupId>
+                                <artifactId>maven-enforcer-plugin</artifactId>
+                              </plugin></plugins>
+                            </build>
+                            """));
+
+            assertThat(only("java.version").value())
+                    .as("the model read holds pluginManagement apart; the build runs this rule")
+                    .isEqualTo("21");
+        }
+
+        @Test
         void aRuleNothingFillsInBesideAKnownLevelIsStillNamed() throws IOException {
             f.pom(
                     "pom.xml",
@@ -1054,6 +1081,239 @@ class MavenEcosystemTest {
                                             .contains("domains: [\"repo.example.org\"]")
                                             .contains("repositories.<name>.image.snippet")
                                             .contains("RUN apt-get update"));
+        }
+
+        /** Harm prevented: a build stops on a host its plugin names in plain sight. */
+        @Test
+        void aJavadocLinkIsAHostAtItsLine() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.apache.maven.plugins",
+                                    "maven-javadoc-plugin",
+                                    """
+                                    <configuration><links>
+                                      <link>https://docs.example.org/api/</link>
+                                    </links></configuration>
+                                    """)));
+
+            Finding host = only("host.docs.example.org");
+
+            assertThat(host.file()).as("where it stands").isEqualTo("pom.xml");
+            assertThat(host.line()).as("the link's own line").isEqualTo(10);
+            assertThat(host.note()).as("what asks it").contains("maven-javadoc-plugin");
+        }
+
+        @Test
+        void aJavadocLinkInAnExecutionIsAHostToo() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.apache.maven.plugins",
+                                    "maven-javadoc-plugin",
+                                    """
+                                    <executions><execution><id>a</id>
+                                      <configuration><links>
+                                        <link>https://docs.example.org/api/</link>
+                                      </links></configuration>
+                                    </execution></executions>
+                                    """)));
+
+            assertThat(only("host.docs.example.org").value())
+                    .as("mapstruct's stands so")
+                    .isEqualTo("docs.example.org");
+        }
+
+        @Test
+        void aJavadocLinkManagedForAPluginTheBuildRunsIsAHost() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                            <build>
+                              <pluginManagement><plugins><plugin>
+                                <artifactId>maven-javadoc-plugin</artifactId>
+                                <configuration><links>
+                                  <link>https://docs.example.org/api/</link>
+                                </links></configuration>
+                              </plugin></plugins></pluginManagement>
+                              <plugins><plugin>
+                                <artifactId>maven-javadoc-plugin</artifactId>
+                              </plugin></plugins>
+                            </build>
+                            """));
+
+            assertThat(only("host.docs.example.org").value())
+                    .as("the build runs it with what is managed")
+                    .isEqualTo("docs.example.org");
+        }
+
+        @Test
+        void aLinkInAProfileTheMachineDecidesOpensNothing() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                            <profiles><profile><id>win</id>
+                              <activation><os><family>windows</family></os></activation>
+                              <build><plugins><plugin>
+                                <artifactId>maven-javadoc-plugin</artifactId>
+                                <configuration><links>
+                                  <link>https://docs.example.org/api/</link>
+                                </links></configuration>
+                              </plugin></plugins></build>
+                            </profile></profiles>
+                            """));
+
+            assertThat(detect().findings())
+                    .as("what such a profile holds is not answered, and opens no host")
+                    .noneMatch(x -> x.key().equals("host.docs.example.org"));
+        }
+
+        @ParameterizedTest
+        @CsvSource({"../other/target/site/apidocs", "/opt/javadoc/api", "file:///opt/javadoc/api"})
+        void aLocalLinkNeedsNoHostAndIsNoUnknown(String link) throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.apache.maven.plugins",
+                                    "maven-javadoc-plugin",
+                                    "<configuration><links><link>"
+                                            + link
+                                            + "</link></links></configuration>")));
+
+            assertThat(detect().findings())
+                    .as("javadoc reads it from disk")
+                    .noneMatch(x -> x.key().startsWith("unknown."));
+        }
+
+        @Test
+        void aPluginsHostNamesNoCredential() throws IOException {
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    plugin(
+                                            "org.apache.maven.plugins",
+                                            "maven-javadoc-plugin",
+                                            "<configuration><links>"
+                                                    + "<link>https://docs.example.org/</link>"
+                                                    + "</links></configuration>")))
+                    .settings(
+                            """
+                            <settings><servers><server>
+                              <id>maven-javadoc-plugin</id><username>u</username>
+                            </server></servers></settings>
+                            """);
+
+            assertThat(detect().findings())
+                    .as("no plugin looks a server up by its own name")
+                    .noneMatch(x -> x.key().startsWith("credential."));
+            assertThat(only("host.docs.example.org").note())
+                    .as("nor is one missing")
+                    .doesNotContain("credential");
+        }
+
+        @Test
+        void aJavadocPluginOnlyManagedOpensNothing() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                            <build><pluginManagement><plugins><plugin>
+                              <artifactId>maven-javadoc-plugin</artifactId>
+                              <configuration><links>
+                                <link>https://docs.example.org/api/</link>
+                              </links></configuration>
+                            </plugin></plugins></pluginManagement></build>
+                            """));
+
+            assertThat(detect().findings())
+                    .as("no build runs it")
+                    .noneMatch(x -> x.key().equals("host.docs.example.org"));
+        }
+
+        @Test
+        void aJavadocLinkThatNamesNoHostIsSaid() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.apache.maven.plugins",
+                                    "maven-javadoc-plugin",
+                                    "<configuration><links><link>${not.set}/api/</link></links>"
+                                            + "</configuration>")));
+
+            assertThat(detect().findings())
+                    .as("unknown, rather than left out")
+                    .anyMatch(
+                            x ->
+                                    x.unknown()
+                                            && x.key().contains("not.set")
+                                            && x.note().contains("maven-javadoc-plugin"));
+        }
+
+        /** Harm prevented: a build stops on the key servers its signature check asks by default. */
+        @Test
+        void pgpverifysDefaultKeyServersAreHostsAtThePlugin() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin("org.simplify4u.plugins", "pgpverify-maven-plugin", "")));
+
+            for (String name :
+                    new String[] {"keyserver.ubuntu.com", "keys.openpgp.org", "pgp.mit.edu"}) {
+                Finding host = only("host." + name);
+                assertThat(host.line()).as("the plugin's line").isEqualTo(7);
+                assertThat(host.note()).as("what asks it").contains("pgpverify-maven-plugin");
+            }
+        }
+
+        @Test
+        void aBlankKeyServerLeavesTheDefaults() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.simplify4u.plugins",
+                                    "pgpverify-maven-plugin",
+                                    "<configuration><pgpKeyServer>  </pgpKeyServer></configuration>")));
+
+            assertThat(only("host.keys.openpgp.org").value())
+                    .as("a blank says nothing, so the plugin takes its own")
+                    .isEqualTo("keys.openpgp.org");
+        }
+
+        @Test
+        void pgpverifysOwnKeyServerReplacesTheDefaults() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.simplify4u.plugins",
+                                    "pgpverify-maven-plugin",
+                                    "<configuration><pgpKeyServer>hkps://keys.example.org,"
+                                            + " hkps://more.example.org</pgpKeyServer>"
+                                            + "</configuration>")));
+
+            assertThat(detect().findings())
+                    .as("only what it says")
+                    .anyMatch(x -> x.key().equals("host.keys.example.org"))
+                    .anyMatch(x -> x.key().equals("host.more.example.org"))
+                    .noneMatch(x -> x.key().equals("host.keys.openpgp.org"));
         }
 
         /** Harm prevented: a plugin's extension leaves the same gap with no way to close it. */

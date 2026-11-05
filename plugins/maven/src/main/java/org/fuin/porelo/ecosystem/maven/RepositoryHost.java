@@ -19,6 +19,8 @@ public record RepositoryHost(
         REPOSITORY,
         /** A {@code <pluginRepository>}. */
         PLUGIN_REPOSITORY,
+        /** An address a plugin the build runs reaches of its own, such as a Javadoc link. */
+        PLUGIN_REACHES,
         /** A settings {@code <mirror>}, which replaces what it mirrors. */
         MIRROR,
         /** A settings {@code <proxy>}, which the build goes through. */

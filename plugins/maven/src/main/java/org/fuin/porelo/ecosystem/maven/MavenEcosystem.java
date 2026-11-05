@@ -78,7 +78,11 @@ public final class MavenEcosystem implements Ecosystem {
                         "host." + host.host(),
                         host.host(),
                         host.place(),
-                        noteOf(host) + (server.known() ? "" : ", with no credential named"));
+                        noteOf(host)
+                                + (server.known()
+                                                || host.kind() == RepositoryHost.Kind.PLUGIN_REACHES
+                                        ? ""
+                                        : ", with no credential named"));
         if (!server.known()) {
             return List.of(asHost);
         }
@@ -97,6 +101,7 @@ public final class MavenEcosystem implements Ecosystem {
                     case REPOSITORY -> "repository ";
                     case PLUGIN_REPOSITORY -> "plugin repository ";
                     case MIRROR -> "mirror ";
+                    case PLUGIN_REACHES -> "the plugin ";
                     case PROXY -> "proxy ";
                 };
         return what + host.id() + " at " + host.url();
