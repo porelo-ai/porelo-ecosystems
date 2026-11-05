@@ -1,0 +1,2 @@
+title: The Maven plugin's warnings say what to write into the generated `project.yml` yourself, with the key and an example, and a container warning says plainly that nothing there changes it.
+type: changed

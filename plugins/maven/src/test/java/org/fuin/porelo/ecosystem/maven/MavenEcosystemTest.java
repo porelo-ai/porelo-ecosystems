@@ -785,6 +785,8 @@ class MavenEcosystemTest {
                                         .contains("a task does not support")
                                         .contains("-DskipTests")
                                         .contains("skip themselves")
+                                        .contains("nothing in project.yml changes that")
+                                        .contains("any security class")
                                         .doesNotContain("-DskipITs");
                             });
         }
@@ -809,6 +811,9 @@ class MavenEcosystemTest {
                                 assertThat(u.note())
                                         .as("it names what fails")
                                         .contains(artifact)
+                                        .contains("nothing in project.yml changes that")
+                                        .contains("any security class")
+                                        .contains("leaves those goals out")
                                         .contains("a task does not support");
                                 assertThat(u.file()).as("where it stands").isEqualTo("pom.xml");
                                 assertThat(u.line()).as("its line, not the pom's").isEqualTo(7);
@@ -1024,6 +1029,102 @@ class MavenEcosystemTest {
             assertThat(detect().unplaced())
                     .as("its code is never loaded, so the answer says what it leaves out")
                     .anyMatch(u -> u.file().equals(".mvn/extensions.xml"));
+        }
+
+        /** Harm prevented: a person is told of a gap and not how to close it themselves. */
+        @ParameterizedTest
+        @CsvSource({
+            ".mvn/extensions.xml, <extensions/>",
+            ".mvn/maven.config, -f",
+            ".mvn/jvm.config, -javaagent:agent.jar"
+        })
+        void whatTheAnswerLeavesOutSaysWhereToWriteItInTheFile(String file, String content)
+                throws IOException {
+            f.pom("pom.xml", project("child", "")).pom(file, content + "\n");
+
+            assertThat(detect().unplaced())
+                    .as("the keys a draft itself writes, each with an example")
+                    .filteredOn(u -> u.file().equals(file))
+                    .isNotEmpty()
+                    .allSatisfy(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("the host's key, and the tool's")
+                                            .contains("repositories.<name>.egress.domains")
+                                            .contains("domains: [\"repo.example.org\"]")
+                                            .contains("repositories.<name>.image.snippet")
+                                            .contains("RUN apt-get update"));
+        }
+
+        /** Harm prevented: a plugin's extension leaves the same gap with no way to close it. */
+        @Test
+        void aPomsExtensionSaysWhereToWriteItInTheFile() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project("child", plugin("org.example", "p", "<extensions>true</extensions>")));
+
+            assertThat(detect().unplaced())
+                    .as("the same gap, from a plugin")
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("the host's key, and the tool's")
+                                            .contains("repositories.<name>.egress.domains")
+                                            .contains("repositories.<name>.image.snippet"));
+        }
+
+        /** Harm prevented: a person trusts a path that does not exist in the task. */
+        @Test
+        void aLocalRepositoryNeedsNoHostAndItsPathInTheTask() throws IOException {
+            f.pom("pom.xml", project("child", repository("r", "file:///srv/repo")));
+
+            assertThat(detect().unplaced())
+                    .as("no host is missing, but the path may be")
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("what is true of each")
+                                            .contains("needs no host")
+                                            .contains("must exist in the task")
+                                            .doesNotContain("needs nothing"));
+        }
+
+        /** Harm prevented: a person edits the project file for what only the file's mode fixes. */
+        @Test
+        void aFileThatCannotBeReadPromisesNoKey() throws IOException {
+            f.pom("pom.xml", project("child", "")).pom(".mvn/maven.config", "-X\n");
+            java.nio.file.Path config = f.checkout.resolve(".mvn/maven.config");
+            java.nio.file.Files.setPosixFilePermissions(config, java.util.Set.of());
+
+            assertThat(detect().unplaced())
+                    .as("the build stops on it too")
+                    .filteredOn(u -> u.file().equals(".mvn/maven.config"))
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("nothing to write")
+                                            .contains("nothing in project.yml changes that")
+                                            .doesNotContain("egress.domains"));
+        }
+
+        /** Harm prevented: what a file too large to read asks is unknown, and unsaid how to add. */
+        @Test
+        void aFileTooLargeSaysWhereToWriteWhatItNeeds() throws IOException {
+            f.pom("pom.xml", project("child", "")).pom(".mvn/maven.config", "-X\n".repeat(600_000));
+
+            assertThat(detect().unplaced())
+                    .as("what stands in it is not read")
+                    .filteredOn(u -> u.file().equals(".mvn/maven.config"))
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("the host's key")
+                                            .contains("too large")
+                                            .contains("repositories.<name>.egress.domains"));
         }
 
         @Test

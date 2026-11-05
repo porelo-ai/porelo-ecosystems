@@ -57,7 +57,8 @@ public final class RepositoryHosts {
     private static final Pattern EXPRESSION = Pattern.compile("\\$\\{([^}]+)}");
     private static final String EXTENSION_LOADED =
             "this loads a Maven extension, whose code can change the model; it is not loaded, so"
-                    + " what it changes is not in this answer";
+                    + " what it changes is not in this answer"
+                    + OwnFile.HOST_OR_TOOL;
 
     private final Places places;
     private final UserSettings settings;
@@ -198,7 +199,8 @@ public final class RepositoryHosts {
             unplaced.add(
                     new Unplaced(
                             "this file loads Maven extensions, which can change the model; they are"
-                                    + " not loaded, so what they change is not in this answer",
+                                    + " not loaded, so what they change is not in this answer"
+                                    + OwnFile.HOST_OR_TOOL,
                             new Place(EXTENSIONS, 0, Origin.CHECKOUT)));
         }
         settings.unread()
@@ -531,7 +533,10 @@ public final class RepositoryHosts {
         if (HostUrl.isLocalFile(url)) {
             unplaced.add(
                     new Unplaced(
-                            "repository " + id + " is a local file URL and needs no host", place));
+                            "repository "
+                                    + id
+                                    + " is a local file URL and needs no host; its path must exist in the task",
+                            place));
         } else {
             unknowns.add(
                     new UnknownValue(

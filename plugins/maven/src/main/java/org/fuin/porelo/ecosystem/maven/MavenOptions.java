@@ -120,10 +120,15 @@ final class MavenOptions {
                 return new String(bytes, StandardCharsets.UTF_8).lines().toList();
             }
         } catch (IOException e) {
-            notes.add(note("this file cannot be read", name, 0));
+            notes.add(
+                    note(
+                            "this file cannot be read, and the build stops on it too; nothing in"
+                                    + " project.yml changes that",
+                            name,
+                            0));
             return List.of();
         }
-        notes.add(note("this file is too large to be followed", name, 0));
+        notes.add(note("this file is too large to be followed" + OwnFile.HOST_OR_TOOL, name, 0));
         return List.of();
     }
 
@@ -159,7 +164,14 @@ final class MavenOptions {
                 profiles(argument.substring(2));
             } else if (argument.startsWith("-")
                     && !LEAVES_THE_MODEL_ALONE.matcher(argument).matches()) {
-                notes.add(note("the option " + argument + " is not followed", MAVEN_CONFIG, i + 1));
+                notes.add(
+                        note(
+                                "the option "
+                                        + argument
+                                        + " is not followed"
+                                        + OwnFile.HOST_OR_TOOL,
+                                MAVEN_CONFIG,
+                                i + 1));
             }
         }
     }
@@ -184,7 +196,8 @@ final class MavenOptions {
                                 "the option "
                                         + token
                                         + " loads code that can change the model, and is not"
-                                        + " followed",
+                                        + " followed"
+                                        + OwnFile.HOST_OR_TOOL,
                                 JVM_CONFIG,
                                 number));
             }

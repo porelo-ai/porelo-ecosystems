@@ -30,8 +30,9 @@ final class ContainerUse {
                 add(
                         places.of(dependency.getLocation("")),
                         "this build uses Testcontainers, whose tests start containers, which a task"
-                                + " does not support, so those tests fail or skip themselves;"
-                                + " -DskipTests leaves them out");
+                                + " does not support in any security class, so those tests fail or"
+                                + " skip themselves; nothing in project.yml changes that;"
+                                + " -DskipTests in the build's command leaves them out");
             }
         }
         if (model.getBuild() != null) {
@@ -41,7 +42,10 @@ final class ContainerUse {
                             places.of(plugin.getLocation("")),
                             plugin.getArtifactId()
                                     + " starts containers or needs their daemon, which a task does"
-                                    + " not support, so its goals fail where the build runs them");
+                                    + " not support in any security class, so its goals fail where"
+                                    + " the build runs them; nothing in project.yml changes that;"
+                                    + " what remains is a build command that leaves those goals"
+                                    + " out");
                 }
             }
         }
