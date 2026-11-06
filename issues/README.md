@@ -45,6 +45,7 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
+| <a id="ec16"></a>[EC16](EC16-A-Project-Whose-Parent-Went-Unread-Still-Gets-A-JDK.md) | S | - | A multi-module Maven project whose parent is outside the checkout and not in the local repository gets a JDK in its image, so Maven runs, with the Java release, Maven's version and the rest the parent sets named unknown at the parent's line. |
 | <a id="ec15"></a>[EC15](EC15-What-The-Exact-Version-Step-Left-Unread.md) | - | - | What installing a project's tools in their exact version left unmeasured: a replaced `image.run`, the HTTP client's size, GraalVM's next asset names, Python's digests, and the online step's time. |
 
 ## Finished
