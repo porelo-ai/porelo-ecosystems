@@ -196,7 +196,7 @@ jobs:
                   # answer other than there or not there stops the release.
                   absent() {
                       local status
-                      status="$(curl -sS --proto =https --max-time 30 -I -o /dev/null -w '%{http_code}' "$base/$1")" \
+                      status="$(curl -sS --retry 5 --retry-all-errors --proto =https --max-time 30 -I -o /dev/null -w '%{http_code}' "$base/$1")" \
                           || { echo "::error::$1 could not be read, so whether it is published is unknown"; exit 1; }
                       case "$status" in
                           404) ;;
@@ -216,7 +216,7 @@ jobs:
                       sha256="$(sha256sum "$1" | cut -d' ' -f1)"
                       echo "  put   $2$(basename "$1")"
                       status="$(printf 'header = "Authorization: Bearer %s"\n' "$JF_ACCESS_TOKEN" \
-                          | curl -fsS --proto =https --max-time 120 -K - -o /dev/null -w '%{http_code}' -T "$1" \
+                          | curl -fsS --retry 5 --retry-all-errors --proto =https --max-time 120 -K - -o /dev/null -w '%{http_code}' -T "$1" \
                               -H "X-Checksum-Sha1: $sha1" -H "X-Checksum-Sha256: $sha256" \
                               "$base/$2$(basename "$1")${3:+;$3}")"
                       case "$status" in
@@ -242,12 +242,12 @@ jobs:
                   rpm="$(basename plugins/maven/target/*.rpm)"
                   indexed() {
                       local packages location primary
-                      packages="$(curl -sSfL --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-deb/dists/${CHANNEL}/main/binary-amd64/Packages")" || return 1
+                      packages="$(curl -sSfL --retry 5 --retry-all-errors --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-deb/dists/${CHANNEL}/main/binary-amd64/Packages")" || return 1
                       grep -qxF "Filename: pool/main/p/porelo-ecosystem-maven/$deb" <<< "$packages" || return 1
-                      location="$(curl -sSfL --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-rpm/${CHANNEL}/repodata/repomd.xml" \
+                      location="$(curl -sSfL --retry 5 --retry-all-errors --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-rpm/${CHANNEL}/repodata/repomd.xml" \
                           | sed -n 's/.*<location href="\([^"]*primary.xml.gz\)".*/\1/p' | head -1)" || return 1
                       [ -n "$location" ] || return 1
-                      primary="$(curl -sSfL --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-rpm/${CHANNEL}/$location" | gunzip)" || return 1
+                      primary="$(curl -sSfL --retry 5 --retry-all-errors --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-rpm/${CHANNEL}/$location" | gunzip)" || return 1
                       grep -qF "$rpm" <<< "$primary"
                   }
                   for attempt in $(seq 1 20); do
