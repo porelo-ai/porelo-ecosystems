@@ -1,6 +1,6 @@
 # EC16 — A Project Behind An In-House Repository Manager Builds In A Task
 
-**Status:** Accepted.
+**Status:** Implementing.
 **Size:** L - four parts in the Maven module (the JDK stand-in, settings that do not parse, the forms of a credential,
 a mirror that takes every repository), and the mirror's reach changes the contract `configure` is called with, in
 Porelo's contract library too.
@@ -84,8 +84,10 @@ value. Detection names an encrypted secret as such and tells the person to store
 - **The mirror's reach.** `detect` answers what a mirror takes beside its host, a rule finding `mirror.<id>` with its
   `<mirrorOf>` as written, at its line. The contract's `Repository` carries what a repository mirrors, and `configure`
   writes it as `<mirrorOf>`, so a mirror of `*` reaches the broker for every repository and the profile is not needed.
-  Whether the credential's kind (Basic or a header's name) travels in the contract too is agreed in the same step.
-  Nothing of the mirror is built before Agent Core agrees the contract change.
+  The `<mirrorOf>` is answered with the whitespace around its commas removed; one holding any character but
+  `[A-Za-z0-9_.:*!,-]` is answered unknown at its line. Beside `credential.<id>` a rule finding `credential-kind.<id>`
+  says `basic`, `header:<Name>` or `unsupported`, for the broker to read. Both are contract changes with Porelo's
+  contract library and are built only once it has agreed them.
 - **The image's Maven.** Where the person's settings mirror every repository, `resolve` fetches Maven through that
   mirror at the same path, with its digest from the same mirror.
 - **Red first**, in `MavenEcosystemTest`, `SettingsReaderTest` and the real-Maven comparison: an unread parent answers a
@@ -97,9 +99,9 @@ value. Detection names an encrypted secret as such and tells the person to store
 
 - On the fixture without the parent in the local repository, the draft names a JDK, and an image built from it runs
   `mvn --version`; the unknown values stand at the parent's line. With the parent there, the answer is unchanged.
-- In a task made from the draft with an invented mirror of every repository, against a local stand-in for the manager, a
-  build resolves a parent only that mirror holds and an artifact of Maven Central, both through the broker, and the
-  egress names no host but the mirror's.
+- Real Maven, run with the settings `configure` writes for an invented mirror of every repository against a local
+  stand-in for the manager, resolves a parent only that mirror holds and an artifact of Maven Central, and reaches no
+  other host.
 - For invented servers in each form, the draft names the credential and the person's action; a search of every answer
   and log for the invented secrets finds none.
 - Settings with an unquoted attribute value answer a warning at that file and the rest of the checkout.

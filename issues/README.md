@@ -17,6 +17,7 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
+| <a id="ec16"></a>[EC16](EC16-A-Project-Behind-An-In-House-Repository-Manager-Builds-In-A-Task.md) | L | - | A multi-module Maven project behind an in-house repository manager builds in a task: a JDK stands in when its parent went unread, a mirror that takes every repository reaches the task's settings, a credential is named in its form without its value, and settings that do not parse are warned of. |
 | <a id="ec13"></a>[EC13](EC13-The-Maven-Adapter-Judged-By-Real-Builds.md) | L | - | The Maven adapter judged by whether a real build runs in a real task, on a corpus of open source projects, with each fault fixed in the Java code alone. |
 
 ## Backlog
@@ -36,7 +37,6 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec16"></a>[EC16](EC16-A-Project-Behind-An-In-House-Repository-Manager-Builds-In-A-Task.md) | L | - | A multi-module Maven project behind an in-house repository manager builds in a task: a JDK stands in when its parent went unread, a mirror that takes every repository reaches the task's settings, a credential is named in its form without its value, and settings that do not parse are warned of. |
 | <a id="ec04"></a>[EC04](EC04-The-Gradle-Plugin.md) | - | - | A checkout built with Gradle gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 | <a id="ec05"></a>[EC05](EC05-The-npm-Plugin.md) | - | - | A checkout built with npm gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 | <a id="ec06"></a>[EC06](EC06-The-pip-Plugin.md) | - | - | A checkout built with pip gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
