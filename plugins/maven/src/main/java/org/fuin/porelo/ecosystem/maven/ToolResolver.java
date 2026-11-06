@@ -18,6 +18,10 @@ final class ToolResolver {
     private static final int NO_JAVA_ASKED = 25;
 
     private static final Pattern MAJOR = Pattern.compile("\\d{1,4}");
+    private static final String MIRROR_OF = "extension.mirrorOf.";
+    // Only what cannot leave the quotes of the image's line, nor reach another host.
+    private static final Pattern PLAIN_HTTPS =
+            Pattern.compile("https://[A-Za-z0-9.-]+(:\\d{1,5})?(/[A-Za-z0-9._~%/+-]*)?");
 
     // Porelo joins run.<name> in the order of the names: the JDK's lines before GraalVM's.
     private static final String JAVA_LINES = "run.1-java";
@@ -97,16 +101,49 @@ final class ToolResolver {
         Finding asked = find(all, "maven.version").orElse(null);
         String range = asked == null || asked.unknown() ? "" : asked.value();
         Predicate<Finding> packages = f -> f.key().equals("package.maven");
+        Optional<Mirror> mirror = mirrorOfCentral(all);
         try {
-            ToolDownload maven = tools.maven(range);
+            ToolDownload maven =
+                    tools.maven(range, mirror.map(Mirror::url).orElse(ToolDownloads.CENTRAL));
             Finding at = find(all, "package.maven").orElseThrow();
             all.removeIf(packages);
-            String where = "Maven " + maven.version();
+            String where =
+                    "Maven "
+                            + maven.version()
+                            + mirror.map(m -> ", through mirror " + m.id()).orElse("");
             all.add(line(at, "run.3-maven", ToolLines.install("maven", maven), where));
             all.add(line(at, "env.MAVEN_HOME", "/opt/maven", where));
         } catch (ToolUnavailable e) {
             noted(all, packages, ("Maven " + range).strip(), e, false);
         }
+    }
+
+    private record Mirror(String id, String url) {}
+
+    // The mirror the person's build reaches Central through, if its URL can stand in a shell line.
+    private static Optional<Mirror> mirrorOfCentral(List<Finding> all) {
+        for (Finding takes : all) {
+            if (!takes.key().startsWith(MIRROR_OF) || takes.unknown()) {
+                continue;
+            }
+            List<String> parts = List.of(takes.value().split(","));
+            boolean central =
+                    !parts.contains("!central")
+                            && (parts.contains("*")
+                                    || parts.contains("external:*")
+                                    || parts.contains("central"));
+            String id = takes.key().substring(MIRROR_OF.length());
+            Optional<String> url =
+                    find(all, "repository." + id)
+                            .filter(f -> !f.unknown())
+                            .map(Finding::value)
+                            .filter(u -> PLAIN_HTTPS.matcher(u).matches());
+            if (central && url.isPresent()) {
+                String base = url.get();
+                return Optional.of(new Mirror(id, base.endsWith("/") ? base : base + "/"));
+            }
+        }
+        return Optional.empty();
     }
 
     private void resolveGraalvm(List<Finding> all, int major) {

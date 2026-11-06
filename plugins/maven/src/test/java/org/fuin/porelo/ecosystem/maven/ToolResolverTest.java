@@ -209,6 +209,63 @@ class ToolResolverTest {
         assertThat(only(all, "env.MAVEN_HOME").value()).as("its home").isEqualTo("/opt/maven");
     }
 
+    private static final String MIRROR = "https://repo.example.org/maven/";
+
+    private void mavenThroughTheMirror() {
+        String dist = MIRROR + "org/apache/maven/apache-maven/";
+        answers.put(
+                dist + "maven-metadata.xml",
+                "<metadata><versioning><versions><version>3.9.16</version>"
+                        + "</versions></versioning></metadata>");
+        answers.put(
+                dist + "3.9.16/apache-maven-3.9.16-bin.tar.gz.sha512", "c".repeat(128) + "  x\n");
+    }
+
+    private void mirror(String mirrorOf, String url) {
+        asked.add(finding("repository.inhouse", url, false));
+        asked.add(finding("extension.mirrorOf.inhouse", mirrorOf, false));
+        asked.add(finding("package.maven", "maven", false));
+    }
+
+    /**
+     * Harm prevented: the image is built where only the person's mirror is reachable, and fails.
+     */
+    @Test
+    void aMirrorTakingCentralServesMavenAndItsDigest() {
+        mirror("*", "https://repo.example.org/maven");
+        mavenThroughTheMirror();
+
+        String line = only(resolver.resolve(asked), "run.3-maven").value();
+
+        assertThat(line)
+                .as("fetched from the mirror and checked against the mirror's digest")
+                .contains(MIRROR + "org/apache/maven/apache-maven/3.9.16/")
+                .contains("c".repeat(128))
+                .doesNotContain("repo.maven.apache.org");
+    }
+
+    @Test
+    void aMirrorNotTakingCentralLeavesMavenAtCentral() {
+        mirror("*,!central", "https://repo.example.org/maven");
+        maven();
+
+        assertThat(only(resolver.resolve(asked), "run.3-maven").value())
+                .as("central is reached as it is")
+                .contains(DIST);
+    }
+
+    /** Harm prevented: a URL from the person's settings breaks out of the image's shell line. */
+    @Test
+    void aMirrorUrlThatIsNotPlainHttpsIsNotUsed() {
+        mirror("*", "https://repo.example.org/m';touch x;'");
+        maven();
+
+        assertThat(only(resolver.resolve(asked), "run.3-maven").value())
+                .as("the mirror is passed over")
+                .contains(DIST)
+                .doesNotContain("touch");
+    }
+
     @Test
     void aWrapperKeepsItsPriorityForMaven() {
         asked.add(finding("maven.version", "3.9.15", false));

@@ -23,8 +23,10 @@ import org.yaml.snakeyaml.error.YAMLException;
 
 /** Finds the newest stable version of what a project asks, from each tool's own vendor. */
 final class ToolDownloads {
-    private static final String MAVEN = "https://repo.maven.apache.org/maven2/org/apache/maven/";
-    private static final String DIST = MAVEN + "apache-maven/";
+    /** Maven Central, where Maven is fetched from unless a mirror takes it. */
+    static final String CENTRAL = "https://repo.maven.apache.org/maven2/";
+
+    private static final String DIST = "org/apache/maven/apache-maven/";
     // 25i5-25.0.5.0.3 since GraalVM split its own releases, 25.0.2 before: read in both forms.
     private static final Pattern GRAALVM_ASSET =
             Pattern.compile(
@@ -137,22 +139,35 @@ final class ToolDownloads {
      * @throws ToolUnavailable when none fits
      */
     ToolDownload maven(String asked) {
+        return maven(asked, CENTRAL);
+    }
+
+    /**
+     * The newest stable Maven a build allows, from a repository holding Central's layout.
+     *
+     * @param asked A version range, a bare version as its floor, or nothing for any.
+     * @param repository The repository's URL, ending in a slash.
+     * @throws ToolUnavailable when none fits
+     */
+    ToolDownload maven(String asked, String repository) {
         VersionRange range = rangeOf(asked);
+        String dist = repository + DIST;
         String version =
-                versions().stream()
+                versions(dist).stream()
                         .filter(v -> STABLE.matcher(v).matches())
                         .map(DefaultArtifactVersion::new)
                         .filter(range::containsVersion)
                         .max(Comparator.naturalOrder())
                         .map(DefaultArtifactVersion::toString)
                         .orElseThrow(() -> new ToolUnavailable("no stable Maven meets " + asked));
-        String archive = DIST + version + "/apache-maven-" + version + "-bin.tar.gz";
+        String archive = dist + version + "/apache-maven-" + version + "-bin.tar.gz";
         String digest = read(URI.create(archive + ".sha512")).strip().split("\\s+")[0];
-        return new ToolDownload(version, archive, digest);
+        String mirror = repository.equals(CENTRAL) ? "" : URI.create(repository).getHost();
+        return new ToolDownload(version, archive, digest, mirror == null ? "" : mirror);
     }
 
-    private List<String> versions() {
-        String metadata = read(URI.create(DIST + "maven-metadata.xml"));
+    private List<String> versions(String dist) {
+        String metadata = read(URI.create(dist + "maven-metadata.xml"));
         try {
             Xpp3Dom versioning = Xpp3DomBuilder.build(new StringReader(metadata));
             return Optional.ofNullable(versioning.getChild("versioning"))
