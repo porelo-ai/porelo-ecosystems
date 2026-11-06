@@ -5,12 +5,22 @@ import static org.fuin.porelo.ecosystem.maven.Fixture.project;
 import static org.fuin.porelo.ecosystem.maven.Fixture.properties;
 import static org.fuin.porelo.ecosystem.maven.Fixture.repository;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.InetAddress;
+import java.net.ServerSocket;
+import java.net.Socket;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import org.fuin.porelo.ecosystem.api.Detection;
 import org.fuin.porelo.ecosystem.api.File;
+import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.api.InstalledEcosystem;
 import org.fuin.porelo.ecosystem.api.Repository;
 import org.junit.jupiter.api.Test;
@@ -74,6 +84,59 @@ class NativeExecutableIT {
             List<File> files = plugin.configure(asked);
 
             assertThat(files).as("the same file").isEqualTo(new MavenEcosystem().configure(asked));
+        }
+    }
+
+    /**
+     * Harm prevented: the installed plugin passes the person's proxy by, or loses the project's
+     * tools when it cannot reach a vendor.
+     */
+    @Test
+    void theExecutableResolvesThroughTheProxyItIsGiven() throws Exception {
+        Fixture f = checkout();
+        Path installed = executable();
+        List<Finding> detected = new MavenEcosystem().detect(f.checkout, f.home).findings();
+
+        // A proxy that writes down what it is asked, then hangs up.
+        try (ServerSocket proxy = new ServerSocket(0, 50, InetAddress.getLoopbackAddress())) {
+            CompletableFuture<String> asked =
+                    CompletableFuture.supplyAsync(
+                            () -> {
+                                // Closed after it: the next requests are refused at once.
+                                try (proxy;
+                                        Socket one = proxy.accept()) {
+                                    return new BufferedReader(
+                                                    new InputStreamReader(
+                                                            one.getInputStream(),
+                                                            StandardCharsets.US_ASCII))
+                                            .readLine();
+                                } catch (IOException e) {
+                                    return "no request: " + e;
+                                }
+                            });
+            try (InstalledEcosystem plugin =
+                    InstalledEcosystem.forResolve(
+                            installed,
+                            root,
+                            Map.of("HTTPS_PROXY", "http://127.0.0.1:" + proxy.getLocalPort()))) {
+                List<Finding> answered = plugin.resolve(f.checkout, f.home, detected).orElseThrow();
+
+                assertThat(asked.get(10, TimeUnit.SECONDS))
+                        .as("the first vendor, asked through the proxy")
+                        .startsWith("CONNECT api.adoptium.net:443 ");
+                assertThat(answered)
+                        .as("the JDK's package stays, saying the vendor did not answer")
+                        .filteredOn(x -> x.key().startsWith("package.openjdk-"))
+                        .singleElement()
+                        .satisfies(
+                                x ->
+                                        assertThat(x.note())
+                                                .as("what was asked, and why it is not there")
+                                                .contains("api.adoptium.net did not answer"));
+                assertThat(answered)
+                        .as("nothing fetched")
+                        .noneMatch(x -> x.key().startsWith("run."));
+            }
         }
     }
 }

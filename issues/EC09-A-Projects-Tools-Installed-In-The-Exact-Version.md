@@ -1,11 +1,11 @@
 # EC09 — A Project's Tools Installed In The Exact Version
 
-**Status:** Implementing.
+**Status:** Review.
 **Size:** L - the online step, its answer as lines and values, their tests; it changes a contract, so it crosses into Porelo, and the image builder needs no new stage.
 
 **What must be true.** What a project asks is installed in the exact version: the JDK, Maven and any other recognized tool, so that a distribution's packages no longer decide it and a pom asking Maven 3.9 no longer meets 3.8.7.
 
-- Ordinary `image.snippet` lines fetch each tool by URL and digest, with no tool manager, and the image holds only the artifact; `image.env` and links on the path do the rest.
+- Ordinary `image.run` lines fetch each tool by URL and digest, with no tool manager, and the image holds only the artifact; `image.env` and links on the path do the rest.
 - When `project.yml` is made, the newest stable version of what the project asks is found: the newest 25 for Java 25, the newest stable Maven in the pom's range, GraalVM likewise. Pre-releases never count. Offline or on a vendor's failure, the draft says unknown and names what was asked.
 - `project.yml` holds the download URL and digest of the version found when the file is made, and the image's build checks it. From then on it is the person's: the plugin only bootstraps.
 - The paths are set correctly: `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`, `MAVEN_HOME`, the tools on the path, and for GraalVM `GRAALVM_HOME`.
@@ -51,7 +51,7 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 
 **A fetch by URL and digest, no SDKMAN, in ordinary lines.** The same small `RUN` serves every tool and plugin, needs no new field and no stage in the image builder, reads as what it does, and the person can change it. It reaches what SDKMAN cannot, adds no host of its own, and checks what SDKMAN leaves unchecked.
 
-**The online step, a call of its own in the contract.** Reading stays as it is: `detect` needs no network and answers what is asked. A new `resolve`, a varlink method of its own beside `detect`, takes those asks and asks the vendors once, when the file is made: Porelo calls it only for `project init`, never for `task start`, and shows it in the draft as its own step, naming each host. It is the one place in the plugin with an HTTP client. The contract's sentence that a plugin opens no connection changes with it; today no `resolve` exists and the executable holds no HTTP client.
+**The online step, `Resolve` in the contract.** Reading stays as it is: `Detect` needs no network and answers what is asked. `Resolve(directory, home, findings)` takes the plugin's own `Detect` findings and asks the vendors once, when the file is made, never for a start with a file; its answer replaces those findings whole. It is the one place in the plugin with an HTTP client. Each request ends within 5 seconds and the whole call within 20, the bounds the contract states.
 
 | Tool | Host asked | What it answers, measured |
 |---|---|---|
@@ -65,35 +65,63 @@ On a throwaway Ubuntu VM, on `ubuntu:24.04`, with real images and real builds; r
 
 **The digest comes from the same source as the archive.** It catches a broken or changed download from then on, and of the first sight proves no more than the TLS connection it was read over.
 
-**The answer.** `detect` keeps `java.version` and `maven.version` as what was asked. `resolve` answers ordinary findings under two more kinds of key, which Porelo places by their prefix alone, so it names no build tool: `snippet.<name>`, whose value is the lines, joined in the order of the key's name, each with its source as a comment, and `env.<NAME>`, whose value is the variable's. Two plugins giving one key two values are a disagreement, as today.
+**The answer.** `detect` keeps `java.version` and `maven.version` as what was asked. `Resolve` answers ordinary findings under two more kinds of key, which Porelo places by their prefix alone, so it names no build tool: `run.<name>`, whose value is image lines (`RUN`, `ARG` and `ENV` only, no control character or tab), joined in the order of the names, and `env.<NAME>`, whose value is the variable's. Each finding's note names the version fetched. Two plugins giving one key two values are a disagreement, as today.
 
-For Maven: `snippet.java`, `snippet.maven` unless a wrapper fetches it, and with `native-maven-plugin` `snippet.graalvm`; `env.JAVA_HOME`, `env.JDK_HOME`, `env.JRE_HOME`, `env.MAVEN_HOME`, `env.GRAALVM_HOME`. `package.openjdk-*`, `package.default-jdk-headless` and `package.maven` go; `package.gcc`, `package.zlib1g-dev` and a new `package.libc6-dev` stay.
+For Maven: `run.1-java`, `run.3-maven` unless a wrapper fetches it, and with `native-maven-plugin` `run.2-graalvm`, numbered so that the JDK's lines run before GraalVM's, which link only what the JDK has not; `env.JAVA_HOME`, `env.JDK_HOME`, `env.JRE_HOME`, `env.MAVEN_HOME`, `env.GRAALVM_HOME`. `package.openjdk-*`, `package.default-jdk-headless` and `package.maven` go; `package.gcc`, `package.zlib1g-dev` and a new `package.libc6-dev` stay.
 
-**What `project.yml` then holds**, under the repository's `image:` (`repositories.<name>.image`, where the draft writes its image lines today), written once and then the person's:
+**What `project.yml` then holds**, under the project's `image:`, written once and then the person's:
 
-    snippet: |
+    run: |
       RUN set -eu; mkdir -p /opt/java; curl -fsSL -o /tmp/java.tgz '<url>'; echo '<digest>  /tmp/java.tgz' | sha256sum -c -; tar xzf /tmp/java.tgz -C /opt/java --strip-components=1; rm /tmp/java.tgz; ln -s /opt/java/bin/* /usr/local/bin/
     env:
       JAVA_HOME: /opt/java
 
 **`PATH` cannot be set this way:** `image.env` refuses it, as Porelo sets it in every task, and an `env.PATH` is refused too. So each tool's commands are linked into `/usr/local/bin`, which stands on that path. From a second tool holding the same names, such as GraalVM's `java`, only what it adds is linked.
 
-**What a vendor answered goes into lines a build runs as root**, so `resolve` writes a URL, version and digest only when each holds what it should: `https`, a known host, a plain character set, a hex digest. Anything else is an unknown.
+**What a vendor answered goes into lines a build runs as root**, so `Resolve` writes a URL, version and digest only when each holds what it should: `https`, a known host, a plain character set, a hex digest. Anything else is an unknown.
 
 **Each line assumes `curl`, which Porelo's image holds, and `tar` and `sha256sum` on a glibc base.** A `base_image` without them fails loudly at that line, and the person sees why.
 
 **What the image's build reaches**, differing from the step's hosts: `github.com` and its redirect `release-assets.githubusercontent.com`, and `repo.maven.apache.org`.
 
-**What the plugin process needs.** Porelo starts a plugin with an empty environment and no network namespace, so nothing blocks the step, and it would reach no proxy: `resolve` needs the person's proxy settings passed in, for this call alone: `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms. The executable gains `https` and an HTTP client, whose size is not measured.
+**What the plugin process needs.** Porelo starts a plugin with an empty environment and no network namespace, so nothing blocks the step. For `Resolve` alone it passes the person's `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms, which the plugin reads from its environment and hands to its HTTP client only. A proxy it cannot read leaves each tool as `Detect` found it, saying so, and a proxy's value appears in no answer. The executable gains `https` and an HTTP client, whose size is not measured.
 
 **Fit of the other plugins, by reading.** Gradle fits: its wrapper already names a digest, and the JDK is the same row. npm fits with Node's archive. pip fits with a standalone Python build, whose digest is still to be read. Flutter fits for its SDK, while its Android SDK and the packages a native wheel or `node-gyp` needs stay `package.<name>` or unknown.
 
-**A native build's JDK.** Both ways were green; GraalVM alone would be one tool less where its major equals the release, while a project whose JDK and GraalVM differ needs both. Each answers its own lines.
+**A native build's JDK.** Both ways were green; GraalVM alone would be one tool less where its major equals the release, while a project whose JDK and GraalVM differ needs both. Each answers its own lines. GraalVM is fetched only beside a JDK fetched too: beside a distribution's JDK, its `java` would stand first on the path, so it stays unknown with a note.
+
+**A proxy is taken or refused, never passed by.** A proxy variable with no host or port to take, such as an unencoded `@` in its password or an underscore in its name, makes each tool unknown with a note naming the variable, never its value, and opens no direct connection in its place.
+
+## After this issue
+
+- **`org.mvnsearch:toolchains-maven-plugin`:** recognized, with a warning at its line that it fetches its own JDK from hosts a draft cannot name, naming `api.foojay.io` and `-Dtoolchain.skip`. No host is opened for it. `guava` at `592a1e6` showed it: the build stops on the refused `api.foojay.io`.
+- **`maven-toolchains-plugin`:** its `<jdk><version>` read, and at least said as a warning; fetching that JDK and writing a `toolchains.xml` is a question for then.
+
+## Where the readers differ from the files' own, accepted
+
+- **SnakeYAML reads a vendor's JSON as YAML 1.1:** it refuses the escape `\/` and unescaped C1 control characters, and accepts tags and merge keys. Neither vendor writes any of them. A refusal makes the tool unknown, said loudly, and a YAML construct in an answer would have to come from the vendor itself, over TLS. The person confirms each line of the draft.
+- **The wrapper's file is read as `java.util.Properties` reads it, in ISO-8859-1:** a malformed `\u` escape anywhere in it leaves the whole file unread, which is said as a note. Non-ASCII bytes in a URL are read as Latin-1. Maven's own wrapper reads the file the same way. Only the script-only `mvnw` reads it more loosely, and such a file is not written by the wrapper's own tools.
+
+## What the step measured
+
+Through Porelo's real `project init` and a real task, with the native adapter and the `Resolve` contract, on a local Ubuntu VM.
+
+| Point | Result |
+|---|---|
+| `Resolve` of the native executable against the vendors, one call | 2.9 s: Temurin 21.0.13+9, Maven 3.10.0, GraalVM CE 21.0.2, each with its digest. |
+| The draft of a pom asking Java 21 and Maven 3.9.0 | `image.run` with the Temurin and Maven lines, `image.env` with `JAVA_HOME`, `JDK_HOME`, `JRE_HOME`, `MAVEN_HOME`; no JDK or Maven package. |
+| That draft's task | Image built in 41 s; `mvn -v` is Maven 3.10.0 on Temurin 21.0.13 from `/opt`; `mvn -B verify` green, its test on JDK 21. |
+| The same with `native-maven-plugin` | Image built in 89 s; `mvn -B verify` runs `/opt/graalvm/bin/native-image` and produces the executable; the tests run on Temurin 21. No connection stopped by the firewall. |
+
+## Readings declined
+
+- **The note's reason when the proxy cannot be read and the pom's Maven range is no range:** the note names the range first. Both say why nothing was fetched, and the person fixes either.
+- **A native test that parses a vendor's answer:** the hosts are fixed `https` addresses, which a test cannot answer for without a certificate the executable trusts. The native executable's real `Resolve` was run once against the vendors and answered Temurin, Maven and GraalVM lines in 2.9 s; the VM leg runs it again through Porelo.
 
 ## To be checked
 
-- That these lines and `env` work through a real task and the image builder, as they ran under plain `podman` only.
-- That a snippet taken whole from another source replaces the draft's lines, as the file's order of sources says.
+- That `image.run` taken whole from another source replaces the draft's lines, as the file's order of sources says.
 - The size the HTTP client adds to the executable.
 - That GraalVM's asset names read the same for its next releases, and the Python builds' digests.
-- The first run's times through the real step: only single requests were timed.
+- The first run's times through the real step over several runs and through a proxy: one call was timed.
+- Both builds above also asked the resolver for `repository.apache.org`, and the native one for `repo1.maven.org` and `oss.sonatype.org`, which the draft does not open: the builds passed without them, so who names them is still to be read.

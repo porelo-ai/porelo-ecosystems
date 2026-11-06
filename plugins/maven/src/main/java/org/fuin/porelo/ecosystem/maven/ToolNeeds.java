@@ -31,10 +31,8 @@ import org.jspecify.annotations.Nullable;
 
 /** What a task's image must hold and how much memory the build asks, from the effective models. */
 final class ToolNeeds {
-    private static final String WRAPPER = ".mvn/wrapper/maven-wrapper.properties";
+    private static final String WRAPPER = WrapperProperties.FILE;
     private static final String JVM_CONFIG = ".mvn/jvm.config";
-    private static final String ONLY_SCRIPT = "distributionType=only-script";
-    private static final String DIGEST = "distributionSha256Sum=";
     private static final Place NOTHING_ASKED = new Place("pom.xml", 0, Origin.CHECKOUT);
     private static final String COMPILER = "org.apache.maven.plugins:maven-compiler-plugin";
     private static final String ENFORCER = "org.apache.maven.plugins:maven-enforcer-plugin";
@@ -43,14 +41,20 @@ final class ToolNeeds {
             List.of(
                     "org.apache.maven.plugins:maven-surefire-plugin",
                     "org.apache.maven.plugins:maven-failsafe-plugin");
+    private static final String NATIVE = "org.graalvm.buildtools:native-maven-plugin";
     // What a plugin runs from the system, as far as is known without running it.
     private static final Map<String, List<String>> PACKAGES =
             Map.of(
-                    "org.graalvm.buildtools:native-maven-plugin", List.of("gcc", "zlib1g-dev"),
-                    "org.apache.maven.plugins:maven-gpg-plugin", List.of("gnupg"),
-                    "io.github.git-commit-id:git-commit-id-maven-plugin", List.of("git"),
-                    "pl.project13.maven:git-commit-id-plugin", List.of("git"),
-                    "org.codehaus.mojo:buildnumber-maven-plugin", List.of("git"));
+                    NATIVE,
+                    List.of("gcc", "libc6-dev", "zlib1g-dev"),
+                    "org.apache.maven.plugins:maven-gpg-plugin",
+                    List.of("gnupg"),
+                    "io.github.git-commit-id:git-commit-id-maven-plugin",
+                    List.of("git"),
+                    "pl.project13.maven:git-commit-id-plugin",
+                    List.of("git"),
+                    "org.codehaus.mojo:buildnumber-maven-plugin",
+                    List.of("git"));
     // The JDKs Ubuntu 24.04, Porelo's default image, packages, as measured; a JDK compiles older
     // releases.
     private static final int HIGHEST_MAJOR = 9999;
@@ -66,6 +70,7 @@ final class ToolNeeds {
 
     private final List<StatedJava> javaStated = new ArrayList<>();
     private @Nullable Finding javaUnknown;
+    private @Nullable Finding nativeBuild;
     private @Nullable Finding maven;
     private boolean wrapperRuns;
     private boolean compilerUnpinned;
@@ -97,6 +102,9 @@ final class ToolNeeds {
      */
     List<Finding> findings(boolean everyPomRead) {
         List<Finding> all = new ArrayList<>();
+        if (nativeBuild != null) {
+            all.add(nativeBuild);
+        }
         if (!javaStated.isEmpty()) {
             all.addAll(javaAndItsPackage());
             if (javaUnknown != null) {
@@ -256,48 +264,45 @@ final class ToolNeeds {
     }
 
     private void readWrapper() {
-        Path file = checkout.resolve(WRAPPER);
-        List<String> lines = lines(file);
         wrapperRuns = Files.isRegularFile(checkout.resolve("mvnw"));
-        boolean onlyScript = lines.stream().anyMatch(l -> l.strip().equals(ONLY_SCRIPT));
-        boolean digest = lines.stream().anyMatch(l -> l.strip().startsWith(DIGEST));
-        for (int i = 0; i < lines.size(); i++) {
-            String line = lines.get(i).strip();
-            if (!line.startsWith("distributionUrl=")) {
-                continue;
-            }
-            // A properties file writes the colon of a URL with a backslash in front of it.
-            String url = line.substring("distributionUrl=".length()).replace("\\", "");
-            Place place = new Place(WRAPPER, i + 1, Origin.CHECKOUT);
-            if (onlyScript && digest && url.endsWith(".zip")) {
-                wrapperPackages.add(
-                        Answers.tool(
-                                "package.unzip",
-                                "unzip",
-                                place,
-                                "without it the wrapper fetches a tarball, which fails the digest"
-                                        + " of this zip"));
-            }
-            Matcher version = WRAPPED_MAVEN.matcher(url);
-            if (version.find()) {
-                maven =
-                        Answers.tool(
-                                "maven.version",
-                                version.group(1),
-                                place,
-                                "the wrapper fetches this version");
-            }
-            HostUrl.parse(url)
-                    .ifPresent(
-                            host ->
-                                    fromFiles.add(
-                                            Answers.rule(
-                                                    "host." + host.host(),
-                                                    host.host(),
-                                                    place,
-                                                    "the Maven wrapper fetches Maven from "
-                                                            + host.url())));
+        WrapperProperties.read(checkout).ifPresent(this::readWrapper);
+    }
+
+    private void readWrapper(WrapperProperties wrapper) {
+        Optional<String> written = wrapper.url();
+        if (written.isEmpty()) {
+            return;
         }
+        String url = written.get();
+        Place place = new Place(WRAPPER, wrapper.urlLine(), Origin.CHECKOUT);
+        if (wrapper.onlyScript() && wrapper.checksDigest() && url.endsWith(".zip")) {
+            wrapperPackages.add(
+                    Answers.tool(
+                            "package.unzip",
+                            "unzip",
+                            place,
+                            "without it the wrapper fetches a tarball, which fails the digest of"
+                                    + " this zip"));
+        }
+        Matcher version = WRAPPED_MAVEN.matcher(url);
+        if (version.find()) {
+            maven =
+                    Answers.tool(
+                            "maven.version",
+                            version.group(1),
+                            place,
+                            "the wrapper fetches this version");
+        }
+        HostUrl.parse(url)
+                .ifPresent(
+                        host ->
+                                fromFiles.add(
+                                        Answers.rule(
+                                                "host." + host.host(),
+                                                host.host(),
+                                                place,
+                                                "the Maven wrapper fetches Maven from "
+                                                        + host.url())));
     }
 
     private void readJvmConfig() {
@@ -423,6 +428,14 @@ final class ToolNeeds {
 
     private void readPackages(Model model, Places places) {
         for (Plugin plugin : used(model)) {
+            if (plugin.getKey().equals(NATIVE) && nativeBuild == null) {
+                nativeBuild =
+                        Answers.tool(
+                                "graalvm.version",
+                                "",
+                                places.of(plugin.getLocation("")),
+                                "native-maven-plugin builds with GraalVM's native-image");
+            }
             for (String name : PACKAGES.getOrDefault(plugin.getKey(), List.of())) {
                 packages.putIfAbsent(
                         name,

@@ -4,4 +4,4 @@ The Maven plugin of Porelo, a native executable found at run time over the contr
 
 `./mvnw -s settings.xml -Pnative verify` builds the executable and its `.deb` and `.rpm`, and tests it. `porelo-ecosystem-maven` depends on Porelo, and Porelo only recommends it, so it can be left out or removed.
 
-It must never depend on anything that reaches a network or decrypts a password: `maven-model-builder` alone, with a resolver that reads only the local repository.
+It must never depend on a library that reaches a network or decrypts a password: `maven-model-builder` for the poms, with a resolver that reads only the local repository, and SnakeYAML for what a vendor answers.

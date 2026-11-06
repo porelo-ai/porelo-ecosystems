@@ -3,15 +3,21 @@ package org.fuin.porelo.ecosystem.maven;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Stream;
 import org.fuin.porelo.ecosystem.api.Detection;
 import org.fuin.porelo.ecosystem.api.Ecosystem;
 import org.fuin.porelo.ecosystem.api.EcosystemMain;
+import org.fuin.porelo.ecosystem.api.EcosystemProtocol;
 import org.fuin.porelo.ecosystem.api.EcosystemRefused;
 import org.fuin.porelo.ecosystem.api.File;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.api.Repository;
+import org.jspecify.annotations.Nullable;
 
 /**
  * The Maven plugin behind Porelo's contract. Each host and credential has a key of its own, since
@@ -20,6 +26,21 @@ import org.fuin.porelo.ecosystem.api.Repository;
 public final class MavenEcosystem implements Ecosystem {
     /** The name its executable is installed under. */
     public static final String NAME = "maven";
+
+    private final Function<String, @Nullable String> environment;
+    private final Function<Map<String, String>, ToolDownloads.Fetch> vendors;
+
+    /** The plugin as it is installed: its environment holds what Porelo passed for the call. */
+    public MavenEcosystem() {
+        this(System::getenv, VendorHttp::new);
+    }
+
+    MavenEcosystem(
+            Function<String, @Nullable String> environment,
+            Function<Map<String, String>, ToolDownloads.Fetch> vendors) {
+        this.environment = environment;
+        this.vendors = vendors;
+    }
 
     /**
      * Runs the plugin as an executable.
@@ -64,6 +85,34 @@ public final class MavenEcosystem implements Ecosystem {
                         .map(MavenEcosystem::ofUnplaced)
                         .distinct()
                         .toList());
+    }
+
+    @Override
+    public Optional<List<Finding>> resolve(Path directory, Path home, List<Finding> findings) {
+        Map<String, String> proxies = new LinkedHashMap<>();
+        for (String name : EcosystemProtocol.PROXY_VARIABLES) {
+            String value = environment.apply(name);
+            if (value != null) {
+                proxies.put(name, value);
+            }
+        }
+        ToolDownloads.Fetch fetch;
+        try {
+            fetch = vendors.apply(proxies);
+        } catch (ToolUnavailable e) {
+            // Each tool then says this as why it was not found.
+            fetch =
+                    uri -> {
+                        throw e;
+                    };
+        }
+        try {
+            return Optional.of(new ToolResolver(new ToolDownloads(fetch)).resolve(findings));
+        } finally {
+            if (fetch instanceof VendorHttp http) {
+                http.close();
+            }
+        }
     }
 
     @Override

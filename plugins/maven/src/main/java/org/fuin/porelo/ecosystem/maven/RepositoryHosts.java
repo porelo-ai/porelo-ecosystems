@@ -2,7 +2,6 @@ package org.fuin.porelo.ecosystem.maven;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
@@ -51,8 +50,7 @@ import org.jspecify.annotations.Nullable;
 public final class RepositoryHosts {
     private static final String ENV_PREFIX = "env.";
     private static final Pattern WRAPPER_DISTRIBUTION =
-            Pattern.compile(
-                    "(?m)^distributionUrl=.*/(apache-maven-[^/\\s]+?)\\.(?:zip|tar\\.gz)\\s*$");
+            Pattern.compile(".*/(apache-maven-[^/\\s]+?)\\.(?:zip|tar\\.gz)");
     private static final String EXTENSIONS = ".mvn/extensions.xml";
     private static final Pattern EXPRESSION = Pattern.compile("\\$\\{([^}]+)}");
     private static final String EXTENSION_LOADED =
@@ -148,15 +146,15 @@ public final class RepositoryHosts {
 
     // The installation the wrapper unpacked, as the only one a home holds for a build to use.
     private static @Nullable Path wrapperSettings(Path checkout, Path home) throws IOException {
-        Path properties = checkout.resolve(".mvn/wrapper/maven-wrapper.properties");
-        if (!Files.isRegularFile(properties)) {
+        Optional<Matcher> named =
+                WrapperProperties.read(checkout)
+                        .flatMap(WrapperProperties::url)
+                        .map(WRAPPER_DISTRIBUTION::matcher)
+                        .filter(Matcher::matches);
+        if (named.isEmpty()) {
             return null;
         }
-        Matcher name =
-                WRAPPER_DISTRIBUTION.matcher(Files.readString(properties, StandardCharsets.UTF_8));
-        if (!name.find()) {
-            return null;
-        }
+        Matcher name = named.get();
         Path unpacked = home.resolve(".m2/wrapper/dists").resolve(name.group(1));
         if (!Files.isDirectory(unpacked)) {
             return null;
@@ -195,6 +193,15 @@ public final class RepositoryHosts {
                             options.globalSettingsPlace()));
         }
         settings.proxies().forEach(this::answerProxy);
+        if (WrapperProperties.unreadable(checkout)) {
+            unplaced.add(
+                    new Unplaced(
+                            "this file is too large or cannot be read, so the Maven the wrapper"
+                                    + " fetches and the host it fetches it from are not in this"
+                                    + " answer"
+                                    + OwnFile.HOST_OR_TOOL,
+                            new Place(WrapperProperties.FILE, 0, Origin.CHECKOUT)));
+        }
         if (Files.exists(checkout.resolve(EXTENSIONS))) {
             unplaced.add(
                     new Unplaced(

@@ -235,6 +235,23 @@ class MavenEcosystemTest {
             assertThat(host.part()).as("the build goes there first").isEqualTo(Finding.Part.RULES);
         }
 
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "distributionUrl = https\\://dl.example.org/apache-maven-3.9.15-bin.zip\n",
+                    "  distributionUrl: https\\://dl.example.org/apache-maven-3.9.15-bin.zip\n",
+                    "distributionUrl=https\\://dl.example.org/\\\n    apache-maven-3.9.15-bin.zip\n"
+                })
+        void theWrapperIsReadInEveryFormItsPropertiesAllow(String written) throws IOException {
+            f.pom("pom.xml", project("child", "")).pom(WRAPPER, "# pinned\n! too\n" + written);
+
+            assertThat(only("maven.version").value())
+                    .as("the wrapper reads this file as properties")
+                    .isEqualTo("3.9.15");
+            assertThat(only("maven.version").line()).as("where the URL starts").isEqualTo(3);
+            assertThat(only("host.dl.example.org").line()).isEqualTo(3);
+        }
+
         @Test
         void anEnforcerRangeIsAnsweredAsWritten() throws IOException {
             f.pom(
@@ -275,7 +292,29 @@ class MavenEcosystemTest {
                     project("child", plugin("org.graalvm.buildtools", "native-maven-plugin", "")));
 
             assertThat(only("package.gcc").value()).isEqualTo("gcc");
+            assertThat(only("package.libc6-dev").value())
+                    .as("native-image links against it")
+                    .isEqualTo("libc6-dev");
+            assertThat(only("graalvm.version").line())
+                    .as("Resolve fetches GraalVM for this, naming the plugin")
+                    .isPositive();
             assertThat(only("package.zlib1g-dev").line()).as("the plugin's line").isPositive();
+        }
+
+        @Test
+        void aNativeBuildInTwoModulesStandsWhereItsPackagesDo() throws IOException {
+            String plugin = plugin("org.graalvm.buildtools", "native-maven-plugin", "");
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "root",
+                                    "<modules><module>a</module><module>b</module></modules>"))
+                    .pom("a/pom.xml", project("a", plugin))
+                    .pom("b/pom.xml", project("b", plugin));
+
+            assertThat(only("graalvm.version").file())
+                    .as("one tool, one place, as its packages")
+                    .isEqualTo(only("package.gcc").file());
         }
 
         @Test
@@ -741,6 +780,21 @@ class MavenEcosystemTest {
             assertThat(only("package.unzip").line()).as("the URL's line").isEqualTo(3);
         }
 
+        @Test
+        void aScriptOnlyWrapperWrittenWithSpacesNeedsUnzipToo() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            WRAPPER,
+                            "distributionType = only-script\n"
+                                    + ZIP
+                                    + "distributionSha256Sum : abc\n")
+                    .pom("mvnw", "");
+
+            assertThat(only("package.unzip").line())
+                    .as("the wrapper checks the zip's digest whatever the separator")
+                    .isEqualTo(2);
+        }
+
         @ParameterizedTest
         @CsvSource({"no digest,true,false", "no script type,false,true"})
         void aWrapperThatCanDoWithoutUnzipNamesNone(String why, boolean onlyScript, boolean digest)
@@ -1077,9 +1131,9 @@ class MavenEcosystemTest {
                             u ->
                                     assertThat(u.note())
                                             .as("the host's key, and the tool's")
-                                            .contains("repositories.<name>.egress.domains")
+                                            .contains("egress.domains")
                                             .contains("domains: [\"repo.example.org\"]")
-                                            .contains("repositories.<name>.image.snippet")
+                                            .contains("image.run")
                                             .contains("RUN apt-get update"));
         }
 
@@ -1330,8 +1384,8 @@ class MavenEcosystemTest {
                             u ->
                                     assertThat(u.note())
                                             .as("the host's key, and the tool's")
-                                            .contains("repositories.<name>.egress.domains")
-                                            .contains("repositories.<name>.image.snippet"));
+                                            .contains("egress.domains")
+                                            .contains("image.run"));
         }
 
         /** Harm prevented: a person trusts a path that does not exist in the task. */
@@ -1370,6 +1424,19 @@ class MavenEcosystemTest {
                                             .doesNotContain("egress.domains"));
         }
 
+        /** Harm prevented: the wrapper's Maven and host go unsaid, and so does how to add them. */
+        @Test
+        void aWrapperFileTooLargeSaysWhereToWriteWhatItNeeds() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(".mvn/wrapper/maven-wrapper.properties", "a=b\n".repeat(300_000));
+
+            assertThat(detect().unplaced())
+                    .as("what stands in it is not read")
+                    .filteredOn(u -> u.file().equals(".mvn/wrapper/maven-wrapper.properties"))
+                    .singleElement()
+                    .satisfies(u -> assertThat(u.note()).contains("egress.domains"));
+        }
+
         /** Harm prevented: what a file too large to read asks is unknown, and unsaid how to add. */
         @Test
         void aFileTooLargeSaysWhereToWriteWhatItNeeds() throws IOException {
@@ -1384,7 +1451,7 @@ class MavenEcosystemTest {
                                     assertThat(u.note())
                                             .as("the host's key")
                                             .contains("too large")
-                                            .contains("repositories.<name>.egress.domains"));
+                                            .contains("egress.domains"));
         }
 
         @Test
@@ -1479,7 +1546,7 @@ class MavenEcosystemTest {
             f.pom("pom.xml", project("child", ""))
                     .pom(
                             ".mvn/wrapper/maven-wrapper.properties",
-                            "distributionUrl=https://x.example.org/apache-maven-3.9.15-bin.zip\n");
+                            "distributionUrl = https\\://x.example.org/apache-maven-3.9.15-bin.zip\n");
             Path conf =
                     f.home.resolve(
                             ".m2/wrapper/dists/apache-maven-3.9.15-bin/abc/apache-maven-3.9.15/conf");

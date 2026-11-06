@@ -12,12 +12,12 @@ out.
 | <a id="ec08"></a>[EC08](EC08-The-Maven-Plugin-Published-As-A-Recommended-Package.md) | M | - | The Maven plugin published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
 | <a id="ec03"></a>[EC03](EC03-The-Maven-Plugin-Behind-The-Contract.md) | M | - | The Maven plugin as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs. |
 | <a id="ec10"></a>[EC10](EC10-The-Reason-A-Plugin-Has-Nothing-To-Secure.md) | XS | - | The rule that a plugin has nothing to secure says its real reason: the plugin runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control. |
+| <a id="ec09"></a>[EC09](EC09-A-Projects-Tools-Installed-In-The-Exact-Version.md) | L | - | What a project asks is installed in the exact version, found once when its file is made, as ordinary image lines fetching by URL and digest, with its paths set and GraalVM brought for a native build. |
 
 ## Implementing
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec09"></a>[EC09](EC09-A-Projects-Tools-Installed-In-The-Exact-Version.md) | L | - | What a project asks is installed in the exact version, found once when its file is made, as ordinary image lines fetching by URL and digest, with its paths set and GraalVM brought for a native build. |
 | <a id="ec13"></a>[EC13](EC13-The-Maven-Adapter-Judged-By-Real-Builds.md) | L | - | The Maven adapter judged by whether a real build runs in a real task, on a corpus of open source projects, with each fault fixed in the Java code alone. |
 
 ## Backlog
