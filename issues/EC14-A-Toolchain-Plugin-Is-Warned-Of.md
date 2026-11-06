@@ -21,6 +21,7 @@ Read in the plugins' own `plugin.xml`: the mvnsearch goal's `skip` reads the pro
   - mvnsearch: it fetches JDK `<version>` (`<vendor>`) from `api.foojay.io` and the vendor's download host, which a draft cannot name, unless the task's `toolchains.xml` already holds one; no host is opened for it; what to write into `project.yml` yourself to let it fetch.
   - Maven's: it needs JDK `<version>` in a `toolchains.xml`, which a task does not have, so the build stops at it.
   - A version the reader cannot read (a property, or none) is named as unknown with where it stands.
+- **Warn only:** no JDK a toolchain asks is fetched and no `toolchains.xml` is written; the person decides what the task gets.
 - **`MavenEcosystem.detect`** concatenates `ToolchainUse`'s unplaced with the others.
 - **The test that goes red first,** in `MavenEcosystemTest` beside `AContainerStartingBuild`: a pom with the mvnsearch plugin and a JDK 27 gets a warning at the plugin's line naming `27` and `api.foojay.io`; then Maven's plugin, the version from `pluginManagement`, a plugin only managed and never used (no warning), and two modules one warning each. The harm it prevents: a draft that reads as complete while the build stops at its first phase.
 
@@ -28,10 +29,6 @@ Read in the plugins' own `plugin.xml`: the mvnsearch goal's `skip` reads the pro
 
 - `guava` at `592a1e6`, through the real first start, gets both warnings at `guava/pom.xml`'s plugin lines, naming JDK 27; seen in the corpus run's `first-start.json`.
 - Each test above is seen to fail with `ToolchainUse` taken out of `detect`.
-
-## Open questions
-
-- **Warn only, or also bring the JDK a toolchain asks?** The adapter could fetch a stable JDK of the asked version as it fetches the build's own, and write a `toolchains.xml` naming it into the image, so such a build runs. That is a new image file and a second JDK in the image, with its size; `guava`'s 27 is early access and would stay a warning either way. Proposed: warn only here, and bring the JDK in an issue of its own if wanted.
 
 ## To be checked
 
