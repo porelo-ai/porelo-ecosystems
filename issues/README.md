@@ -26,6 +26,12 @@ out.
 | <a id="ec11"></a>[EC11](EC11-The-Word-Ecosystem-Adapter.md) | M | - | "Ecosystem adapter" replaces "plugin" for what Porelo finds at run time, before a first release fixes the word: `plugins/` becomes `adapters/`, with every text a person reads; the package and installed paths stay. |
 | <a id="ec12"></a>[EC12](EC12-A-Default-Host-Says-It-Is-Maven-s-Own.md) | XS | - | A host that comes from no file, such as Maven's built-in Central, says in its note that it is Maven's built-in default. |
 
+## Analyzed
+
+| # | Size | Blocked by | Open questions | What it covers |
+|---|---|---|---|---|
+| <a id="ec14"></a>[EC14](EC14-A-Toolchain-Plugin-Is-Warned-Of.md) | S | - | 1 | A plugin that picks or fetches its own JDK, `toolchains-maven-plugin` or Maven's own, gets a warning at its line naming the JDK it asks, instead of a build stopping on a refused host or a missing toolchain. |
+
 ## Accepted
 
 | # | Size | Blocked by | What it covers |
@@ -34,7 +40,6 @@ out.
 | <a id="ec05"></a>[EC05](EC05-The-npm-Plugin.md) | - | - | A checkout built with npm gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 | <a id="ec06"></a>[EC06](EC06-The-pip-Plugin.md) | - | - | A checkout built with pip gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 | <a id="ec07"></a>[EC07](EC07-The-Flutter-Plugin.md) | - | - | A checkout built with Flutter gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
-| <a id="ec14"></a>[EC14](EC14-A-Toolchain-Plugin-Is-Warned-Of.md) | - | - | A plugin that picks or fetches its own JDK, such as `toolchains-maven-plugin` asking `api.foojay.io`, gets a warning at its line instead of a build stopping on a refused host. |
 
 ## Idea
 
