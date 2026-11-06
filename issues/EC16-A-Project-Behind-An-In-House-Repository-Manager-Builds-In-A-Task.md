@@ -1,9 +1,9 @@
 # EC16 — A Project Behind An In-House Repository Manager Builds In A Task
 
 **Status:** Implementing.
-**Size:** L - four parts in the Maven module (the JDK stand-in, settings that do not parse, the forms of a credential,
-a mirror that takes every repository), and the mirror's reach changes the contract `configure` is called with, in
-Porelo's contract library too.
+**Size:** M - four parts in the Maven module (the JDK stand-in, settings that do not parse, the forms of a credential,
+a mirror that takes every repository) and one contract change, the mirror's reach `configure` is called with; about 90
+minutes, against a comparable issue of another repository estimated at 120 that took 43.
 
 **What must be true.** A person whose multi-module Maven project inherits from a parent kept in an in-house repository
 manager, reached through a `settings.xml` whose mirror takes every repository, gets a draft whose task builds:
