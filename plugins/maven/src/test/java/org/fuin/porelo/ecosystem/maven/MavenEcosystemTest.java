@@ -646,8 +646,9 @@ class MavenEcosystemTest {
                     .as("neither a crash nor a default JDK that reads as asked for")
                     .isTrue();
             assertThat(detect().findings())
-                    .as("no JDK is named on a value that names none")
-                    .noneMatch(x -> x.key().contains("-jdk"));
+                    .as("a JDK named on a value that names none says it only stands in")
+                    .filteredOn(x -> x.key().contains("-jdk"))
+                    .allMatch(x -> x.note().startsWith("stands in"));
         }
 
         private static String requireJava(String range) {
@@ -701,31 +702,59 @@ class MavenEcosystemTest {
             assertThat(only("java.version").unknown())
                     .as("the parent may name one, so nothing says none is asked")
                     .isTrue();
-            assertThat(detect().findings())
-                    .as("the default JDK would be a guess")
-                    .noneMatch(x -> x.key().contains("-jdk"));
+        }
+
+        /** Harm prevented: the image holds a Maven with no JDK, which cannot start at all. */
+        @Test
+        void aParentNotFoundStillGetsTheHighestPackagedJdkAtItsLine() throws IOException {
+            f.pom("pom.xml", project("child", Fixture.parent("absent", "")));
+            Finding parent = only("unknown.org.example:absent:1");
+
+            Finding jdk = standIn();
+
+            assertThat(jdk.unknown()).as("installed, so Maven runs").isFalse();
+            assertThat(List.of(jdk.file(), jdk.line()))
+                    .as("beside the parent that would say which")
+                    .isEqualTo(List.of(parent.file(), parent.line()));
+            assertThat(List.of(only("java.version").file(), only("java.version").line()))
+                    .as("the unknown release stands there too")
+                    .isEqualTo(List.of(parent.file(), parent.line()));
+            assertThat(jdk.note())
+                    .as("says what it stands in for")
+                    .contains("org.example:absent:1");
         }
 
         @Test
-        void aModuleThatCannotBeReadMayAskARelease() throws IOException {
+        void aModuleThatCannotBeReadStillGetsAJdk() throws IOException {
             f.pom("pom.xml", project("child", "<modules><module>m</module></modules>"))
                     .pom("m/pom.xml", "<project><broken");
 
             assertThat(only("java.version").unknown())
                     .as("the module may name one, so nothing says none is asked")
                     .isTrue();
-            assertThat(detect().findings())
-                    .as("the default JDK would be a guess")
-                    .noneMatch(x -> x.key().contains("-jdk"));
+            assertThat(standIn().unknown()).as("Maven still needs a JDK").isFalse();
         }
 
         @Test
-        void aReleaseNothingFillsInNamesNoJdk() throws IOException {
+        void aReleaseNothingFillsInStillGetsAJdk() throws IOException {
             f.pom("pom.xml", project("child", properties("maven.compiler.release", "${unset}")));
 
-            assertThat(detect().findings())
-                    .as("the unknown stays, and no JDK is guessed beside it")
-                    .noneMatch(x -> x.key().contains("jdk"));
+            assertThat(only("java.version").unknown()).as("the release stays unknown").isTrue();
+            assertThat(standIn().unknown()).as("Maven still needs a JDK").isFalse();
+        }
+
+        // The highest packaged JDK compiles every release a lower one does.
+        private Finding standIn() {
+            List<Finding> jdks =
+                    detect().findings().stream()
+                            .filter(x -> x.key().matches("package\\.openjdk-\\d+-jdk-headless"))
+                            .toList();
+            assertThat(jdks).as("one JDK in %s", jdks).hasSize(1);
+            int major = Integer.parseInt(jdks.get(0).value().replaceAll("\\D", ""));
+            assertThat(major)
+                    .as("the highest packaged, at least the one a release of 25 gets")
+                    .isGreaterThanOrEqualTo(25);
+            return jdks.get(0);
         }
 
         @Test

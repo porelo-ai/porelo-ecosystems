@@ -76,7 +76,7 @@ public final class MavenEcosystem implements Ecosystem {
             throw new EcosystemRefused(
                     EcosystemRefused.Reason.UNREADABLE, String.valueOf(e.getMessage()));
         }
-        List<Finding> findings = new ArrayList<>(needs.findings(answer.everyPomRead()));
+        List<Finding> findings = new ArrayList<>(needs.findings(answer.firstUnread()));
         answer.hosts().forEach(host -> findings.addAll(ofHost(host)));
         answer.unknowns().forEach(unknown -> findings.add(ofUnknown(unknown)));
         return new Detection(

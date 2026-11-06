@@ -96,11 +96,15 @@ final class ToolNeeds {
     }
 
     /**
-     * What was found, with Maven's version always named: a pom means a Maven.
+     * What was found, with Maven's version and a JDK always named: a pom means a Maven, which runs
+     * on a JDK.
      *
-     * @param everyPomRead false when what asks for a version may stand in a pom that went unread
+     * @param unread the first pom or parent that went unread, which may ask for a version; null
+     *     when every one was read
      */
-    List<Finding> findings(boolean everyPomRead) {
+    List<Finding> findings(@Nullable UnknownValue unread) {
+        boolean everyPomRead = unread == null;
+        Place unreadAt = unread == null ? NOTHING_ASKED : unread.place();
         List<Finding> all = new ArrayList<>();
         if (nativeBuild != null) {
             all.add(nativeBuild);
@@ -118,23 +122,31 @@ final class ToolNeeds {
                                 javaUnknown.origin(),
                                 true,
                                 javaUnknown.note()));
-            } else if (!everyPomRead) {
+            } else if (unread != null) {
                 all.add(
                         Answers.unknown(
                                 Finding.Part.TOOLS,
                                 JAVA_BEYOND_STATED,
-                                NOTHING_ASKED,
-                                "a pom that went unread may set a limit on the JDK as well"));
+                                unreadAt,
+                                unread.what()
+                                        + " went unread and may set a limit on the JDK as well"));
             }
         } else if (javaUnknown != null) {
             all.add(javaUnknown);
-        } else if (!everyPomRead) {
-            all.add(
+            all.add(standIn(javaUnknown, "the release is not known"));
+        } else if (unread != null) {
+            Finding java =
                     Answers.unknown(
                             Finding.Part.TOOLS,
                             "java.version",
-                            NOTHING_ASKED,
-                            "no pom read asks for a Java release, and one that went unread may"));
+                            unreadAt,
+                            "no pom read asks for a Java release, and "
+                                    + unread.what()
+                                    + ", which went unread, may; building the project once on this"
+                                    + " machine fills the local repository, and a new detection"
+                                    + " answers it");
+            all.add(java);
+            all.add(standIn(java, "what " + unread.what() + " asks is not known"));
         } else {
             all.add(
                     Answers.tool(
@@ -149,7 +161,7 @@ final class ToolNeeds {
                         : Answers.tool(
                                 "maven.version",
                                 "",
-                                NOTHING_ASKED,
+                                unreadAt,
                                 everyPomRead
                                         ? "no version is asked for, so any Maven serves"
                                         : "no pom read asks for a version, and one that went"
@@ -227,6 +239,18 @@ final class ToolNeeds {
         return packaged.isPresent()
                 ? packaged
                 : IntStream.rangeClosed(1, HIGHEST_MAJOR).filter(meets).max();
+    }
+
+    // Maven runs on a JDK, and the highest packaged compiles every release a lower one does.
+    private static Finding standIn(Finding asked, String why) {
+        int highest = PACKAGED_JDKS.get(PACKAGED_JDKS.size() - 1);
+        return beside(
+                asked,
+                "openjdk-" + highest + "-jdk-headless",
+                false,
+                "stands in, since Maven needs a JDK and "
+                        + why
+                        + "; the highest JDK packaged builds any release up to its own");
     }
 
     private static Finding jdkPackage(Finding asked, int major, List<JavaNeed> needs) {
