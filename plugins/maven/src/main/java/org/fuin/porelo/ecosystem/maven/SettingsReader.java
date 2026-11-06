@@ -16,6 +16,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.xml.XMLConstants;
+import javax.xml.stream.Location;
 import javax.xml.stream.XMLInputFactory;
 import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
@@ -106,10 +107,34 @@ final class SettingsReader {
                 }
             }
         } catch (XMLStreamException e) {
-            throw new IOException(
-                    "not readable: " + file + ": line " + e.getLocation().getLineNumber(), e);
+            return unparsed(e.getLocation());
         }
         return settings();
+    }
+
+    // The parser's message quotes the file, so only where it stopped is said.
+    private UserSettings unparsed(@Nullable Location where) {
+        int line = where == null ? 0 : Math.max(where.getLineNumber(), 0);
+        int column = where == null ? 0 : Math.max(where.getColumnNumber(), 0);
+        Place place = places.of(file, line);
+        return new UserSettings(
+                null,
+                List.of(),
+                Map.of(),
+                List.of(),
+                List.of(),
+                List.of(),
+                List.of(
+                        new UserSettings.Unread(
+                                place.file(),
+                                "it does not parse at line "
+                                        + line
+                                        + ", column "
+                                        + column
+                                        + ", and Maven stops on it too; nothing in it is read",
+                                place)),
+                List.of(),
+                List.of());
     }
 
     private void start(XMLStreamReader reader) throws XMLStreamException {

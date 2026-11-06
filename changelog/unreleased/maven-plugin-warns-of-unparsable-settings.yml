@@ -1,0 +1,2 @@
+title: Warn of Maven settings that do not parse, naming the file, line and column without quoting it, and answer the rest of the checkout without them, instead of refusing the whole checkout.
+type: changed

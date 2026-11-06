@@ -65,19 +65,32 @@ class MavenEcosystemTest {
                                         .isEqualTo(EcosystemRefused.Reason.NOT_RECOGNIZED));
     }
 
-    /** Harm prevented: a settings file nobody could read is taken for one naming nothing. */
+    /**
+     * Harm prevented: settings that do not parse either stop the whole answer, or are taken for
+     * settings naming nothing, or leak what they hold into the answer.
+     */
     @Test
-    void settingsThatCannotBeReadAreUnreadableAndNotEmpty() throws IOException {
-        f.pom("pom.xml", project("child", "")).settings("<settings><broken>");
+    void settingsThatDoNotParseAreWarnedOfAndTheRestIsAnswered() throws IOException {
+        f.pom("pom.xml", project("child", repository("corp", "https://nexus.example.org/m")))
+                .settings(
+                        """
+                        <settings>
+                          <mirrors><mirror><url>https://hidden.example.org/m</url></mirror>
+                          <servers xmlns=http://maven.apache.org/SETTINGS/1.1.0>
+                        </settings>
+                        """);
 
-        assertThatThrownBy(this::detect)
-                .as("the reason says what to look at")
-                .isInstanceOfSatisfying(
-                        EcosystemRefused.class,
-                        e -> {
-                            assertThat(e.reason()).isEqualTo(EcosystemRefused.Reason.UNREADABLE);
-                            assertThat(e.detail()).contains("settings.xml");
-                        });
+        Detection detection = detect();
+
+        Finding warning = only("unknown..m2/settings.xml");
+        assertThat(warning.unknown()).as("a warning, not a value").isTrue();
+        assertThat(warning.note()).as("where to look").contains("line 3");
+        assertThat(detection.findings())
+                .as("the rest of the checkout is still answered")
+                .anyMatch(x -> x.key().equals("host.nexus.example.org"));
+        assertThat(detection.findings())
+                .as("nothing the unread file holds reaches the answer")
+                .noneMatch(x -> (x.key() + x.value() + x.note()).contains("hidden"));
     }
 
     /** Harm prevented: the image holds another JDK than the one the build compiles for. */
