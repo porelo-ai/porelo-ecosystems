@@ -587,10 +587,10 @@ public final class RepositoryHosts {
     }
 
     private ServerReference server(String id, Place repositoryPlace) {
-        Place place = settings.servers().get(id);
-        return place == null
+        UserSettings.Server server = settings.servers().get(id);
+        return server == null
                 ? new ServerReference(id, false, repositoryPlace)
-                : new ServerReference(id, true, place);
+                : new ServerReference(id, true, server.place(), server.credential());
     }
 
     private void answerConditionalProfiles(ModelBuildingResult result, String modelId) {

@@ -15,7 +15,7 @@ import org.jspecify.annotations.Nullable;
  *
  * @param localRepository the local repository as written, null when not set
  * @param mirrors the mirrors, in their order
- * @param servers each server id with its line
+ * @param servers each server by its id, with its line and what it sends
  * @param activeProfiles the profiles Maven would apply without asking, as Maven's own type
  * @param activeProfileIds the ids the settings name to activate a profile, there or in a pom
  * @param unknowns what depends on where the build runs
@@ -26,7 +26,7 @@ import org.jspecify.annotations.Nullable;
 record UserSettings(
         @Nullable String localRepository,
         List<Mirror> mirrors,
-        Map<String, Place> servers,
+        Map<String, Server> servers,
         List<Profile> activeProfiles,
         List<String> activeProfileIds,
         List<SettingsCondition> unknowns,
@@ -45,6 +45,9 @@ record UserSettings(
 
     /** A value of the settings that cannot be taken as it is written. */
     record Unread(String what, String why, Place place) {}
+
+    /** A server, with what it sends; none of its secrets. */
+    record Server(Place place, @Nullable Credential credential) {}
 
     /** A settings profile activated by something other than the settings themselves. */
     record SettingsCondition(String profile, String condition, Place place) {}
@@ -66,7 +69,7 @@ record UserSettings(
         Map<String, Mirror> allMirrors = new LinkedHashMap<>();
         mirrors.forEach(m -> allMirrors.put(m.id(), m));
         global.mirrors.forEach(m -> allMirrors.putIfAbsent(m.id(), m));
-        Map<String, Place> allServers = new LinkedHashMap<>(servers);
+        Map<String, Server> allServers = new LinkedHashMap<>(servers);
         global.servers.forEach(allServers::putIfAbsent);
         Map<String, Proxy> allProxies = new LinkedHashMap<>();
         proxies.forEach(p -> allProxies.put(p.id(), p));

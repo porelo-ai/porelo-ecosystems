@@ -135,13 +135,24 @@ public final class MavenEcosystem implements Ecosystem {
         if (!server.known()) {
             return List.of(asHost);
         }
-        return List.of(
-                asHost,
+        Finding named =
                 Answers.rule(
                         "credential." + server.id(),
                         server.id(),
                         server.place(),
-                        "named by " + noteOf(host) + "; its value is not read"));
+                        "named by " + noteOf(host) + "; its value is not read");
+        Credential sent = server.credential();
+        if (sent == null) {
+            return List.of(asHost, named);
+        }
+        return List.of(
+                asHost,
+                named,
+                Answers.rule(
+                        "credential-kind." + server.id(),
+                        sent.kind(),
+                        server.place(),
+                        sent.toStore()));
     }
 
     private static String noteOf(RepositoryHost host) {

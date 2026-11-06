@@ -38,7 +38,9 @@ final class SettingsReader {
     private static final Set<String> CONDITIONS = Set.of("jdk", "os", "file", "property");
     private static final String MIRRORS = "settings/mirrors";
     private static final String MIRROR = MIRRORS + "/mirror";
-    private static final String SERVER = "settings/servers/server";
+    private static final String SERVERS = "settings/servers";
+    private static final String SERVER = SERVERS + "/server";
+    private static final String HEADER = SERVER + "/configuration/httpHeaders/property";
     private static final String PROXIES = "settings/proxies";
     private static final String PROXY = PROXIES + "/proxy";
     private static final String ACTIVE_PROFILES = "settings/activeProfiles";
@@ -58,7 +60,7 @@ final class SettingsReader {
     private final Deque<String> path = new ArrayDeque<>();
     private @Nullable String localRepository;
     private final List<UserSettings.Mirror> mirrors = new ArrayList<>();
-    private final Map<String, Place> servers = new LinkedHashMap<>();
+    private final Map<String, UserSettings.Server> servers = new LinkedHashMap<>();
     private final List<ProfileDraft> profiles = new ArrayList<>();
     private final Set<String> activeIds = new LinkedHashSet<>();
     private final List<UserSettings.Unread> unread = new ArrayList<>();
@@ -67,6 +69,8 @@ final class SettingsReader {
     private @Nullable ProxyDraft proxy;
     private @Nullable MirrorDraft mirror;
     private @Nullable RepositoryDraft repository;
+    private @Nullable ServerDraft server;
+    private @Nullable HeaderDraft header;
 
     private SettingsReader(Path file, MavenOptions options, Places places) {
         this.file = file;
@@ -157,6 +161,11 @@ final class SettingsReader {
         } else if (parent.equals(PLUGIN_REPOSITORIES) && name.equals("pluginRepository")) {
             repository = new RepositoryDraft();
             repository.plugin = true;
+        } else if (parent.equals(SERVERS) && name.equals("server")) {
+            server = new ServerDraft();
+        } else if (parent.equals(HEADER.substring(0, HEADER.lastIndexOf('/')))
+                && name.equals("property")) {
+            header = new HeaderDraft();
         }
         if (name.equals("localRepository") && parent.equals("settings")) {
             localRepository = text(reader);
@@ -167,8 +176,10 @@ final class SettingsReader {
                     line);
             return;
         }
-        if (name.equals("id") && parent.equals(SERVER)) {
-            servers.putIfAbsent(text(reader), places.of(file, line));
+        if (parent.equals(SERVER) && server != null && takeServer(reader, name, line)) {
+            return;
+        }
+        if (parent.equals(HEADER) && header != null && takeHeader(reader, name)) {
             return;
         }
         if (name.equals("activeProfile") && parent.equals(ACTIVE_PROFILES)) {
@@ -333,7 +344,75 @@ final class SettingsReader {
             repository = null;
         } else if (parent.equals(PROFILES) && name.equals("profile")) {
             profile = null;
+        } else if (parent.equals(SERVERS) && name.equals("server")) {
+            finishServer(java.util.Objects.requireNonNull(server));
+            server = null;
+        } else if (parent.equals(HEADER.substring(0, HEADER.lastIndexOf('/')))
+                && name.equals("property")) {
+            HeaderDraft draft = java.util.Objects.requireNonNull(header);
+            if (server != null && draft.name != null && draft.value != null) {
+                server.headers.add(new Credential.Header(draft.name, draft.value));
+            }
+            header = null;
         }
+    }
+
+    // A secret's text is read only for its form, and dropped at once.
+    private boolean takeServer(XMLStreamReader reader, String name, int line)
+            throws XMLStreamException {
+        ServerDraft draft = java.util.Objects.requireNonNull(server);
+        switch (name) {
+            case "id" -> {
+                draft.id = text(reader);
+                draft.line = line;
+            }
+            case "password" ->
+                    draft.password = Credential.Secret.of(reader.getElementText().strip());
+            case "privateKey" -> {
+                reader.getElementText();
+                draft.privateKey = true;
+            }
+            case "username", "passphrase" -> reader.getElementText();
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private boolean takeHeader(XMLStreamReader reader, String name) throws XMLStreamException {
+        HeaderDraft draft = java.util.Objects.requireNonNull(header);
+        switch (name) {
+            case "name" -> draft.name = reader.getElementText().strip();
+            case "value" -> draft.value = Credential.Secret.of(reader.getElementText().strip());
+            default -> {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private void finishServer(ServerDraft draft) {
+        if (draft.id != null) {
+            servers.putIfAbsent(
+                    draft.id,
+                    new UserSettings.Server(
+                            places.of(file, draft.line),
+                            Credential.of(draft.password, draft.privateKey, draft.headers)));
+        }
+    }
+
+    private static final class ServerDraft {
+        @Nullable String id;
+        int line;
+        Credential.@Nullable Secret password;
+        boolean privateKey;
+        final List<Credential.Header> headers = new ArrayList<>();
+    }
+
+    private static final class HeaderDraft {
+        @Nullable String name;
+        Credential.@Nullable Secret value;
     }
 
     private void finishMirror(MirrorDraft draft) {

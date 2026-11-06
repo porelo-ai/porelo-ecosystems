@@ -1111,6 +1111,52 @@ class MavenEcosystemTest {
                     .doesNotContain("hunter2");
         }
 
+        /**
+         * Harm prevented: the person stores a credential the broker cannot send, or a secret's
+         * value reaches the answer.
+         */
+        @ParameterizedTest
+        @CsvSource(
+                delimiter = '|',
+                value = {
+                    "<username>u</username><password>s3cr3t-plain</password>|basic|Base64",
+                    "<username>u</username><password>${env.REPO_TOKEN}</password>|basic|REPO_TOKEN",
+                    "<username>u</username><password>{s3cr3tMaven3=}</password>|basic|does not"
+                            + " decrypt",
+                    "<username>u</username><password>{[name=master,version=4.0]s3cr3tMaven4=}"
+                            + "</password>|basic|does not decrypt",
+                    "<configuration><httpHeaders><property><name>Private-Token</name>"
+                            + "<value>s3cr3t-header</value></property></httpHeaders>"
+                            + "</configuration>|header:Private-Token|token",
+                    "<configuration><httpHeaders><property><name>Private-Token</name>"
+                            + "<value>{s3cr3tMaven3=}</value></property></httpHeaders>"
+                            + "</configuration>|header:Private-Token|does not decrypt",
+                    "<privateKey>/keys/s3cr3t-key</privateKey><passphrase>s3cr3t-pass</passphrase>"
+                            + "|unsupported|private key"
+                })
+        void aCredentialSaysItsKindAndWhatToStoreButNeverItsValue(
+                String server, String kind, String toStore) throws IOException {
+            f.pom("pom.xml", project("child", repository("corp", "https://nexus.example.org/m")))
+                    .settings(
+                            "<settings><servers><server><id>corp</id>"
+                                    + server
+                                    + "</server></servers></settings>");
+
+            Finding stated = only("credential-kind.corp");
+
+            assertThat(stated.value()).as("what the broker reads").isEqualTo(kind);
+            assertThat(stated.note()).as("what the person stores").contains(toStore);
+            assertThat(List.of(stated.file(), stated.line()))
+                    .as("at the server it stands for")
+                    .isEqualTo(
+                            List.of(
+                                    only("credential.corp").file(),
+                                    only("credential.corp").line()));
+            assertThat(detect().asMap().toString())
+                    .as("no secret's value, encrypted or not")
+                    .doesNotContain("s3cr3t");
+        }
+
         @Test
         void aRepositoryWithoutAServerNamesNoCredential() throws IOException {
             f.pom("pom.xml", project("child", repository("open", "https://open.example.org/m")));
