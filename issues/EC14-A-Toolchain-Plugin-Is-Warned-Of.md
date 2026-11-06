@@ -1,6 +1,6 @@
 # EC14 — A Toolchain Plugin Is Warned Of
 
-**Status:** Idea.
+**Status:** Accepted.
 
 **What must be true.** A person whose pom uses a plugin that picks or fetches its own JDK reads a warning at that plugin's line in the draft, instead of meeting a build that stops on a refused host.
 
