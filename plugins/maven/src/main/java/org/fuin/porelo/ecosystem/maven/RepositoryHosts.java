@@ -521,7 +521,8 @@ public final class RepositoryHosts {
                                                 host.url(),
                                                 RepositoryHost.Kind.MIRROR,
                                                 place,
-                                                server(id, place))));
+                                                server(id, place),
+                                                mirror.mirrorOf())));
     }
 
     private void answerProxy(UserSettings.Proxy proxy) {

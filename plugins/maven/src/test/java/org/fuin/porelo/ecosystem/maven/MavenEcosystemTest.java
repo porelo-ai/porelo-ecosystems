@@ -1157,6 +1157,65 @@ class MavenEcosystemTest {
                     .doesNotContain("s3cr3t");
         }
 
+        /**
+         * Harm prevented: a task's settings send a repository the person's mirror takes past that
+         * mirror, where the egress refuses it.
+         */
+        @Test
+        void aMirrorIsARepositoryWithWhatItTakesAsTheExtension() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .settings(
+                            """
+                            <settings><mirrors><mirror>
+                              <id>inhouse</id>
+                              <url>https://repo.example.org/maven</url>
+                              <mirrorOf>external:*,!local</mirrorOf>
+                            </mirror></mirrors></settings>
+                            """);
+
+            Finding repository = only("repository.inhouse");
+            Finding takes = only("extension.mirrorOf.inhouse");
+
+            assertThat(repository.value())
+                    .as("its URL")
+                    .isEqualTo("https://repo.example.org/maven");
+            assertThat(takes.value()).as("as written").isEqualTo("external:*,!local");
+            assertThat(List.of(takes.file(), takes.line()))
+                    .as("at the mirror")
+                    .isEqualTo(List.of(repository.file(), repository.line()));
+        }
+
+        @Test
+        void aRepositoryOfAPomIsARepositoryTakingOnlyItself() throws IOException {
+            f.pom("pom.xml", project("child", repository("corp", "https://nexus.example.org/m")));
+
+            assertThat(only("repository.corp").value()).isEqualTo("https://nexus.example.org/m");
+            assertThat(detect().findings())
+                    .as("it stands for itself alone")
+                    .noneMatch(x -> x.key().startsWith("extension."));
+        }
+
+        /** Harm prevented: a name or pattern Porelo cannot carry is sent and split or refused. */
+        @ParameterizedTest
+        @CsvSource({"in.house, *", "inhouse, '*,a;b'", "inhouse, '*, b'"})
+        void whatPoreloCannotCarryIsUnknownAndNeverSent(String id, String mirrorOf)
+                throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .settings(
+                            """
+                            <settings><mirrors><mirror>
+                              <id>%s</id><url>https://repo.example.org/m</url>
+                              <mirrorOf>%s</mirrorOf>
+                            </mirror></mirrors></settings>
+                            """
+                                    .formatted(id, mirrorOf));
+
+            assertThat(detect().findings())
+                    .as("nothing goes into the draft for it")
+                    .noneMatch(x -> x.key().startsWith("extension."))
+                    .anyMatch(x -> x.unknown() && x.key().contains(id));
+        }
+
         @Test
         void aRepositoryWithoutAServerNamesNoCredential() throws IOException {
             f.pom("pom.xml", project("child", repository("open", "https://open.example.org/m")));

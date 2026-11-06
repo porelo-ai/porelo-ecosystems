@@ -68,32 +68,36 @@ value. Detection names an encrypted secret as such and tells the person to store
 
 ## Plan
 
-- **The stand-in JDK.** `ToolNeeds.findings`: when no Java is stated and a pom went unread, `java.version` stays
-  unknown, and the highest JDK the distribution packages stands beside it, marked as standing in for what the unread
-  parent asks. The unknown Java, the empty Maven version and the stand-in stand at the line of the first parent that
-  went unread, with a note naming it and saying that building once on the person's machine fills the local repository.
-- **Settings that do not parse.** `SettingsReader` turns a parse failure into an `UnknownValue` at that file, "it does
-  not parse at line L, column C, and Maven stops on it too; it is not read", and `RepositoryHosts` carries on without
-  it. The parser's message is not passed on, since it quotes the file. Size and DTD refusals stay as they are.
+- **The stand-in JDK.** `ToolNeeds.findings`: when the Java release is not known, because a pom or parent went unread
+  or a value names no version, `java.version` stays unknown, and the highest JDK the distribution packages stands
+  beside it, its note saying it stands in. The unknown Java, the empty Maven version and the stand-in stand at the line
+  of the first pom or parent that went unread, with a note naming it and saying that building once on the person's
+  machine fills the local repository.
+- **Settings that do not parse.** `SettingsReader` turns a parse failure into an unknown value at that file, with the
+  line and column where it stops and that Maven stops on it too, and the rest is answered without it. The parser's
+  message is not passed on, since it quotes the file. Size and DTD refusals stay as they are.
 - **The forms of a credential.** `SettingsReader` reads, for each server, which fields it holds and the form of each
-  secret, without keeping its text: plain, `${env.NAME}` (the variable's name is kept), another expression, Maven 3's
-  `{…}` or Maven 4's `{[…]…}`. A header's name is kept, never its value. The credential's finding names the kind (user
-  and password, header `<name>`, private key) and what the person stores: the value, the variable's value, or for an
-  encrypted secret the plain value, since Porelo does not decrypt. A private key is said to be unsupported by the
-  broker, if Porelo's contract library says so.
-- **The mirror's reach.** `detect` answers what a mirror takes beside its host, a rule finding `mirror.<id>` with its
-  `<mirrorOf>` as written, at its line. The contract's `Repository` carries what a repository mirrors, and `configure`
-  writes it as `<mirrorOf>`, so a mirror of `*` reaches the broker for every repository and the profile is not needed.
-  The `<mirrorOf>` is answered with the whitespace around its commas removed; one holding any character but
-  `[A-Za-z0-9_.:*!,-]` is answered unknown at its line. Beside `credential.<id>` a rule finding `credential-kind.<id>`
-  says `basic`, `header:<Name>` or `unsupported`, for the broker to read. Both are contract changes with Porelo's
-  contract library and are built only once it has agreed them.
+  secret, without keeping its text: plain, `${env.NAME}` (the variable's name is kept), another expression, or
+  encrypted, which in Maven 3's `{…}` and Maven 4's `{[…]…}` alike is whatever stands between braces. A header's name
+  is kept, never its value. Beside `credential.<id>`, a rule finding `credential-kind.<id>` says `basic`,
+  `header:<Name>` or `unsupported` for the broker, and its note what the person stores in the Porelo-Vault: for
+  `basic` the Base64 of `username:password`, since the broker sends one value; for an encrypted secret the plain one,
+  since Porelo does not decrypt. A private key, or more than one header, is `unsupported`.
+- **The mirror's reach.** For each repository, plugin repository and mirror the build reaches, `detect` answers a rule
+  finding `repository.<id>` with its URL, `<id>` being the name the task declares it under, and for a mirror
+  `extension.mirrorOf.<id>` with its `<mirrorOf>` as written. Porelo writes the latter into the project's Maven
+  extension, never reads it for its egress, and hands it back to `configure`, which writes it as that repository's
+  `<mirrorOf>`, so a mirror of `*` reaches the broker for every repository. An id outside `[A-Za-z0-9_-]` or longer than
+  64, or a `<mirrorOf>` outside `[A-Za-z0-9_.:*!,-]`, is answered unknown at its line and never sent: Maven splits
+  `<mirrorOf>` at commas and trims no part, so a space changes what it takes and is not dropped. `configure` reads the
+  extension once Porelo's contract library passes it.
 - **The image's Maven.** Where the person's settings mirror every repository, `resolve` fetches Maven through that
   mirror at the same path, with its digest from the same mirror.
 - **Red first**, in `MavenEcosystemTest`, `SettingsReaderTest` and the real-Maven comparison: an unread parent answers a
   JDK package, where today it answers none; settings that do not parse warn, where today the checkout is refused; a
   `{…}`, a `{[…]…}`, a `${env.NAME}` and a header token are each named in their form, with a test that no invented
-  secret's text appears in any finding; a mirror of `*` makes `configure` write a mirror of `*`.
+  secret's text appears in any finding; a mirror's id and `<mirrorOf>` are answered, or unknown where Porelo cannot carry
+  them; an extension with a mirror of `*` makes `configure` write a mirror of `*`.
 
 ## Acceptance
 
