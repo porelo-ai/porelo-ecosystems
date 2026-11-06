@@ -1,6 +1,6 @@
 # EC16 — A Project Behind An In-House Repository Manager Builds In A Task
 
-**Status:** Implementing.
+**Status:** Review.
 **Size:** M - four parts in the Maven module (the JDK stand-in, settings that do not parse, the forms of a credential,
 a mirror that takes every repository) and one contract change, the mirror's reach `configure` is called with; about 90
 minutes, against a comparable issue of another repository estimated at 120 that took 43.
@@ -117,6 +117,9 @@ value. Detection names an encrypted secret as such and tells the person to store
   it does without the profile. For an import found nowhere, the same settings ask the stand-in alone, while settings
   whose mirror takes only itself, as before, also ask `repo.maven.apache.org` and a repository a pom declares, which a
   task's egress refuses.
+
+- `configure` writes one mirror per repository in the order Porelo passes them, and Maven tries mirror patterns in that
+  order; the task's order matches the person's where Porelo keeps the order `detect` answers them in.
 
 ## To be checked
 

@@ -3,12 +3,10 @@ package org.fuin.porelo.ecosystem.maven;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import org.fuin.porelo.ecosystem.api.Detection;
@@ -80,16 +78,8 @@ public final class MavenEcosystem implements Ecosystem {
                     EcosystemRefused.Reason.UNREADABLE, String.valueOf(e.getMessage()));
         }
         List<Finding> findings = new ArrayList<>(needs.findings(answer.firstUnread()));
-        Set<String> declared = new HashSet<>();
-        answer.hosts()
-                .forEach(
-                        host -> {
-                            findings.addAll(ofHost(host));
-                            // One declaration per id: its repository and plugin repository are one.
-                            if (declared.add(host.id())) {
-                                findings.addAll(ToolRepository.of(host));
-                            }
-                        });
+        answer.hosts().forEach(host -> findings.addAll(ofHost(host)));
+        findings.addAll(ToolRepository.of(answer.hosts()));
         answer.unknowns().forEach(unknown -> findings.add(ofUnknown(unknown)));
         return new Detection(
                 findings.stream().distinct().toList(),

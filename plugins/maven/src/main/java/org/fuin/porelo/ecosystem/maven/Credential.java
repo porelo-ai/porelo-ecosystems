@@ -91,6 +91,18 @@ record Credential(String kind, String toStore) {
                     "it sends several headers, and Porelo's broker sends one; reaching this"
                             + " repository needs a single token its manager accepts");
         }
+        if (headers.size() == 1 && headers.get(0).name().isEmpty()) {
+            return new Credential(
+                    "unsupported",
+                    "it sends a header with no name, which Porelo's broker cannot send; reaching this"
+                            + " repository needs a single token its manager accepts");
+        }
+        if (headers.size() == 1 && password != null) {
+            return new Credential(
+                    "unsupported",
+                    "it sends both a password and a header, and Porelo's broker sends one; reaching"
+                            + " this repository needs a single token its manager accepts");
+        }
         if (headers.size() == 1) {
             Header header = headers.get(0);
             return new Credential(

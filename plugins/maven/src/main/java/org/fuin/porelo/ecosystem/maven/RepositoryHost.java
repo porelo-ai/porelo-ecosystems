@@ -10,6 +10,9 @@ package org.fuin.porelo.ecosystem.maven;
  * @param place the line of its URL
  * @param server the server its id refers to; for a proxy, whether it has a credential of its own
  * @param mirrorOf for a mirror, the repositories it takes as its settings write them; else empty
+ * @param mirrorOfLayouts for a mirror, the layouts it takes as its settings write them; else empty
+ * @param rank for a mirror, its place among the settings' mirrors, which Maven tries in order; else
+ *     -1
  */
 public record RepositoryHost(
         String id,
@@ -18,12 +21,14 @@ public record RepositoryHost(
         Kind kind,
         Place place,
         ServerReference server,
-        String mirrorOf) {
+        String mirrorOf,
+        String mirrorOfLayouts,
+        int rank) {
 
     /** A host that stands for itself alone. */
     public RepositoryHost(
             String id, String host, String url, Kind kind, Place place, ServerReference server) {
-        this(id, host, url, kind, place, server, "");
+        this(id, host, url, kind, place, server, "", "", -1);
     }
 
     /** What names a host. */

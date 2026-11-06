@@ -1,2 +1,2 @@
-title: Name the highest packaged JDK as a stand-in when the Java release a Maven build asks for is not known, such as when its parent is not in the local repository, so the image's Maven can start; the unknown values stand at the line of the parent that went unread.
+title: Name the highest packaged JDK as a stand-in when the Java release a Maven build asks for is not known, such as when its parent is not in the local repository, a module is missing or a range admits no JDK, so the image's Maven can start; the unknown values stand at the line of the parent or module that went unread.
 type: fixed

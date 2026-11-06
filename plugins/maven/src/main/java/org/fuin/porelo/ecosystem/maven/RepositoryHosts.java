@@ -381,13 +381,14 @@ public final class RepositoryHosts {
 
     private void answerFailure(ModelBuildingException failure, Path pom) {
         Place place = places.of(pom, 0);
-        if (firstUnread == null) {
-            firstUnread = new UnknownValue(place.file(), "Maven's model builder refuses it", place);
-        }
         List<UnknownValue> refusals = guard.takeRefusals();
         if (!refusals.isEmpty()) {
-            unknowns.addAll(refusals);
+            // The pom the guard refused, often a parent, is the one that went unread.
+            refusals.forEach(this::unread);
             return;
+        }
+        if (firstUnread == null) {
+            firstUnread = new UnknownValue(place.file(), "Maven's model builder refuses it", place);
         }
         for (ModelProblem problem : failure.getProblems()) {
             if (problem.getSeverity() != ModelProblem.Severity.WARNING) {
@@ -522,7 +523,9 @@ public final class RepositoryHosts {
                                                 RepositoryHost.Kind.MIRROR,
                                                 place,
                                                 server(id, place),
-                                                mirror.mirrorOf())));
+                                                mirror.mirrorOf(),
+                                                mirror.layouts(),
+                                                settings.mirrors().indexOf(mirror))));
     }
 
     private void answerProxy(UserSettings.Proxy proxy) {
@@ -634,7 +637,7 @@ public final class RepositoryHosts {
             if (Files.isRegularFile(modulePom)) {
                 modules.add(modulePom);
             } else {
-                unknowns.add(
+                unread(
                         new UnknownValue(
                                 "module " + places.withoutThePaths(module),
                                 "it is missing, and is not read",

@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** Answers shaped as each vendor's were measured. */
 class ToolDownloadsTest {
@@ -491,5 +492,18 @@ class ToolDownloadsTest {
                     .as("a broken answer is not a crash")
                     .isInstanceOf(ToolUnavailable.class);
         }
+    }
+
+    /** Harm prevented: a mirror's host lets an archive from any other host into the image. */
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "https://other.example.org/maven/apache-maven-3.9.16-bin.tar.gz",
+                "http://repo.example.org/maven/apache-maven-3.9.16-bin.tar.gz",
+                "https://repo.example.org.other.example/apache-maven-3.9.16-bin.tar.gz"
+            })
+    void onlyTheMirrorsOwnHostByHttpsIsTaken(String url) {
+        assertThatThrownBy(() -> new ToolDownload("3.9.16", url, SHA512, "repo.example.org"))
+                .isInstanceOf(ToolUnavailable.class);
     }
 }

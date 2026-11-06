@@ -1,2 +1,2 @@
-title: Fetch the image's Maven, and its digest, through the person's mirror where that mirror takes Maven Central, so a network that reaches only the mirror still builds the image; only a plain https address of that mirror's own host is used.
+title: Fetch the image's Maven, and its digest, through the mirror the person's Maven takes Maven Central through, so a network that reaches only the mirror still builds the image; only a plain https address of that mirror's own host and a valid port is used, and Maven comes from Central otherwise.
 type: added

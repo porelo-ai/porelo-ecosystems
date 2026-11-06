@@ -211,7 +211,9 @@ final class ToolNeeds {
                             "java.version",
                             highest.place(),
                             "no JDK meets " + statedBy(needs));
-            return floor == 0 ? List.of(none) : List.of(none, jdkPackage(none, floor, needs));
+            return floor == 0
+                    ? List.of(none, standIn(none, "no JDK meets " + statedBy(needs)))
+                    : List.of(none, jdkPackage(none, floor, needs));
         }
         int major = chosen.getAsInt();
         StatedJava binding =

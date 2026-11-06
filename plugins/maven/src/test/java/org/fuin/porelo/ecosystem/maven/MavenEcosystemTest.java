@@ -77,7 +77,7 @@ class MavenEcosystemTest {
                 .settings(
                         """
                         <settings>
-                          <mirrors><mirror><url>https://hidden.example.org/m</url></mirror>
+                          <mirrors><mirror><id>hidden</id><mirrorOf>*</mirrorOf><url>https://hidden.example.org/m</url></mirror></mirrors>
                           <servers xmlns=http://maven.apache.org/SETTINGS/1.1.0>
                         </settings>
                         """);
@@ -663,6 +663,7 @@ class MavenEcosystemTest {
             assertThat(detect().findings())
                     .as("a JDK named on a value that names none says it only stands in")
                     .filteredOn(x -> x.key().contains("-jdk"))
+                    .isNotEmpty()
                     .allMatch(x -> x.note().startsWith("stands in"));
         }
 
@@ -748,6 +749,34 @@ class MavenEcosystemTest {
                     .as("the module may name one, so nothing says none is asked")
                     .isTrue();
             assertThat(standIn().unknown()).as("Maven still needs a JDK").isFalse();
+        }
+
+        @Test
+        void aMissingModuleStillGetsAJdkAtItsLine() throws IOException {
+            f.pom("pom.xml", project("child", "<modules><module>gone</module></modules>"));
+            Finding module =
+                    detect().findings().stream()
+                            .filter(x -> x.unknown() && x.key().contains("module gone"))
+                            .findFirst()
+                            .orElseThrow();
+
+            Finding jdk = standIn();
+
+            assertThat(List.of(jdk.file(), jdk.line()))
+                    .as("beside the module that would say which")
+                    .isEqualTo(List.of(module.file(), module.line()));
+        }
+
+        /**
+         * Harm prevented: the stand-in points at a pom that was read, not at the one that was not.
+         */
+        @Test
+        void aParentTheGuardRefusesIsWhereTheStandInStands() throws IOException {
+            String large = "<!-- " + "x".repeat(PomGuard.MAX_POM_BYTES) + " -->";
+            f.localPom("org.example", "large", "1", large + project("large", ""))
+                    .pom("pom.xml", project("child", Fixture.parent("large", "")));
+
+            assertThat(standIn().file()).as("the refused parent").endsWith("large-1.pom");
         }
 
         @Test
@@ -1134,7 +1163,14 @@ class MavenEcosystemTest {
                             + "<value>{s3cr3tMaven3=}</value></property></httpHeaders>"
                             + "</configuration>|header:Private-Token|does not decrypt",
                     "<privateKey>/keys/s3cr3t-key</privateKey><passphrase>s3cr3t-pass</passphrase>"
-                            + "|unsupported|private key"
+                            + "|unsupported|private key",
+                    "<configuration><httpHeaders><property><name/>"
+                            + "<value>s3cr3t-header</value></property></httpHeaders>"
+                            + "</configuration>|unsupported|no name",
+                    "<username>u</username><password>s3cr3t-plain</password>"
+                            + "<configuration><httpHeaders><property><name>X-Custom</name>"
+                            + "<value>s3cr3t-header</value></property></httpHeaders>"
+                            + "</configuration>|unsupported|both"
                 })
         void aCredentialSaysItsKindAndWhatToStoreButNeverItsValue(
                 String server, String kind, String toStore) throws IOException {
@@ -1197,6 +1233,87 @@ class MavenEcosystemTest {
                     .noneMatch(x -> x.key().startsWith("extension."));
         }
 
+        /** Harm prevented: a proxy of the same id hides the mirror, and the task goes around it. */
+        @Test
+        void aProxyUnderTheMirrorsIdDoesNotHideTheMirror() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .settings(
+                            """
+                            <settings>
+                              <proxies><proxy><id>inhouse</id><host>proxy.example.org</host>
+                                <port>3128</port></proxy></proxies>
+                              <mirrors><mirror><id>inhouse</id><mirrorOf>*</mirrorOf>
+                                <url>https://repo.example.org/maven</url></mirror></mirrors>
+                            </settings>
+                            """);
+
+            assertThat(only("repository.inhouse").value())
+                    .isEqualTo("https://repo.example.org/maven");
+            assertThat(only("extension.mirrorOf.inhouse").value()).isEqualTo("*");
+        }
+
+        /** Harm prevented: one of two addresses under one name is dropped without a word. */
+        @Test
+        void twoAddressesUnderOneIdAreUnknownAndNeitherIsSent() throws IOException {
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    "<modules><module>a</module><module>b</module></modules>"))
+                    .pom("a/pom.xml", project("a", repository("corp", "https://one.example.org/m")))
+                    .pom(
+                            "b/pom.xml",
+                            project("b", repository("corp", "https://two.example.org/m")));
+
+            assertThat(detect().findings())
+                    .noneMatch(x -> x.key().equals("repository.corp"))
+                    .anyMatch(x -> x.unknown() && x.key().equals("unknown.repository.corp"));
+        }
+
+        /** Harm prevented: the task's Maven picks another of two mirrors than the person's does. */
+        @Test
+        void mirrorsAreAnsweredInTheOrderOfTheSettings() throws IOException {
+            f.pom("pom.xml", project("child", repository("corp", "https://corp.example.org/m")))
+                    .settings(
+                            """
+                            <settings><mirrors>
+                              <mirror><id>first</id><mirrorOf>central,other</mirrorOf>
+                                <url>https://first.example.org/m</url></mirror>
+                              <mirror><id>second</id><mirrorOf>*</mirrorOf>
+                                <url>https://second.example.org/m</url></mirror>
+                            </mirrors></settings>
+                            """);
+
+            List<String> keys = detect().findings().stream().map(Finding::key).toList();
+
+            assertThat(keys.indexOf("extension.mirrorOf.first"))
+                    .as("Maven tries patterns in the order the settings write them")
+                    .isNotNegative()
+                    .isLessThan(keys.indexOf("extension.mirrorOf.second"));
+        }
+
+        /** Harm prevented: a mirror of some layouts only takes every repository in the task. */
+        @Test
+        void aMirrorOfSomeLayoutsOnlyIsUnknown() throws IOException {
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    "<repositories><repository><id>p</id>"
+                                            + "<url>https://p2.example.org/r</url><layout>p2</layout>"
+                                            + "</repository></repositories>"))
+                    .settings(
+                            """
+                            <settings><mirrors><mirror><id>m</id><mirrorOf>*</mirrorOf>
+                              <mirrorOfLayouts>p2</mirrorOfLayouts>
+                              <url>https://mirror.example.org/m</url></mirror></mirrors></settings>
+                            """);
+
+            assertThat(detect().findings())
+                    .noneMatch(x -> x.key().equals("extension.mirrorOf.m"))
+                    .anyMatch(x -> x.unknown() && x.key().equals("unknown.mirrorOf.m"));
+        }
+
         /** Harm prevented: a name or pattern Porelo cannot carry is sent and split or refused. */
         @ParameterizedTest
         @CsvSource({"in.house, *", "inhouse, '*,a;b'", "inhouse, '*, b'"})
@@ -1215,6 +1332,7 @@ class MavenEcosystemTest {
             assertThat(detect().findings())
                     .as("nothing goes into the draft for it")
                     .noneMatch(x -> x.key().startsWith("extension."))
+                    .noneMatch(x -> x.key().equals("repository.in.house"))
                     .anyMatch(x -> x.unknown() && x.key().contains(id));
         }
 

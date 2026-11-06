@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.fuin.porelo.ecosystem.api.Finding;
 
@@ -21,7 +22,8 @@ final class ToolResolver {
     private static final String MIRROR_OF = "extension.mirrorOf.";
     // Only what cannot leave the quotes of the image's line, nor reach another host.
     private static final Pattern PLAIN_HTTPS =
-            Pattern.compile("https://[A-Za-z0-9.-]+(:\\d{1,5})?(/[A-Za-z0-9._~%/+-]*)?");
+            Pattern.compile("https://[A-Za-z0-9.-]+(:(\\d{1,5}))?(/[A-Za-z0-9._~/+-]*)?");
+    private static final int HIGHEST_PORT = 65_535;
 
     // Porelo joins run.<name> in the order of the names: the JDK's lines before GraalVM's.
     private static final String JAVA_LINES = "run.1-java";
@@ -120,30 +122,49 @@ final class ToolResolver {
 
     private record Mirror(String id, String url) {}
 
-    // The mirror the person's build reaches Central through, if its URL can stand in a shell line.
+    // The mirror the person's Maven reaches Central through, as Maven picks it: one naming central
+    // alone first, then the first pattern taking it in the settings' order. It is used only when
+    // its
+    // URL can stand in a shell line and be fetched; otherwise Maven comes from Central itself.
     private static Optional<Mirror> mirrorOfCentral(List<Finding> all) {
-        for (Finding takes : all) {
-            if (!takes.key().startsWith(MIRROR_OF) || takes.unknown()) {
-                continue;
-            }
-            List<String> parts = List.of(takes.value().split(","));
-            boolean central =
-                    !parts.contains("!central")
-                            && (parts.contains("*")
-                                    || parts.contains("external:*")
-                                    || parts.contains("central"));
-            String id = takes.key().substring(MIRROR_OF.length());
-            Optional<String> url =
-                    find(all, "repository." + id)
+        List<Finding> mirrors =
+                all.stream().filter(f -> f.key().startsWith(MIRROR_OF) && !f.unknown()).toList();
+        Optional<Finding> taking =
+                mirrors.stream()
+                        .filter(f -> f.value().equals("central"))
+                        .findFirst()
+                        .or(
+                                () ->
+                                        mirrors.stream()
+                                                .filter(f -> takesCentral(f.value()))
+                                                .findFirst());
+        return taking.flatMap(
+                takes -> {
+                    String id = takes.key().substring(MIRROR_OF.length());
+                    return find(all, "repository." + id)
                             .filter(f -> !f.unknown())
                             .map(Finding::value)
-                            .filter(u -> PLAIN_HTTPS.matcher(u).matches());
-            if (central && url.isPresent()) {
-                String base = url.get();
-                return Optional.of(new Mirror(id, base.endsWith("/") ? base : base + "/"));
-            }
+                            .filter(ToolResolver::plainHttps)
+                            .map(u -> new Mirror(id, u.endsWith("/") ? u : u + "/"));
+                });
+    }
+
+    private static boolean takesCentral(String pattern) {
+        List<String> parts = List.of(pattern.split(","));
+        return !parts.contains("!central")
+                && (parts.contains("*")
+                        || parts.contains("external:*")
+                        || parts.contains("central"));
+    }
+
+    private static boolean plainHttps(String url) {
+        Matcher plain = PLAIN_HTTPS.matcher(url);
+        if (!plain.matches()) {
+            return false;
         }
-        return Optional.empty();
+        String port = plain.group(2);
+        return port == null
+                || Integer.parseInt(port) >= 1 && Integer.parseInt(port) <= HIGHEST_PORT;
     }
 
     private void resolveGraalvm(List<Finding> all, int major) {

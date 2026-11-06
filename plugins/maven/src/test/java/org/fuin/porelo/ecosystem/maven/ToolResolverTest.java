@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 /** Harm prevented: a project gets a distribution's version, or no tool at all. */
 class ToolResolverTest {
@@ -264,6 +266,46 @@ class ToolResolverTest {
                 .as("the mirror is passed over")
                 .contains(DIST)
                 .doesNotContain("touch");
+    }
+
+    /** Harm prevented: resolve stops on a mirror address no request can be built from. */
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "https://repo.example.org:99999/maven",
+                "https://repo.example.org:0/maven",
+                "https://repo.example.org/maven%"
+            })
+    void aMirrorAddressThatCannotBeFetchedIsNotUsed(String url) {
+        mirror("*", url);
+        maven();
+
+        assertThat(only(resolver.resolve(asked), "run.3-maven").value()).contains(DIST);
+    }
+
+    /** Harm prevented: Maven is fetched from a mirror the person's Maven never asks for it. */
+    @Test
+    void theMirrorNamingCentralWinsOverAnEarlierPattern() {
+        asked.add(finding("repository.any", "https://any.example.org/m", false));
+        asked.add(finding("extension.mirrorOf.any", "*", false));
+        mirror("central", "https://repo.example.org/maven");
+        mavenThroughTheMirror();
+
+        assertThat(only(resolver.resolve(asked), "run.3-maven").value()).contains(MIRROR);
+    }
+
+    @Test
+    void theMirrorTakingCentralFirstIsTheOneOrNone() {
+        asked.add(finding("repository.first", "http://first.example.org/m", false));
+        asked.add(finding("extension.mirrorOf.first", "central,other", false));
+        mirror("*", "https://repo.example.org/maven");
+        maven();
+        mavenThroughTheMirror();
+
+        assertThat(only(resolver.resolve(asked), "run.3-maven").value())
+                .as("the person's Maven takes the first, which cannot stand in a line")
+                .contains(DIST)
+                .doesNotContain(MIRROR);
     }
 
     @Test
