@@ -36,6 +36,7 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
+| <a id="ec16"></a>[EC16](EC16-A-Project-Behind-An-In-House-Repository-Manager-Builds-In-A-Task.md) | L | - | A multi-module Maven project behind an in-house repository manager builds in a task: a JDK stands in when its parent went unread, a mirror that takes every repository reaches the task's settings, a credential is named in its form without its value, and settings that do not parse are warned of. |
 | <a id="ec04"></a>[EC04](EC04-The-Gradle-Plugin.md) | - | - | A checkout built with Gradle gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 | <a id="ec05"></a>[EC05](EC05-The-npm-Plugin.md) | - | - | A checkout built with npm gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 | <a id="ec06"></a>[EC06](EC06-The-pip-Plugin.md) | - | - | A checkout built with pip gets its tools and rules recognized by a plugin of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
@@ -45,7 +46,6 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec16"></a>[EC16](EC16-A-Project-Behind-An-In-House-Repository-Manager-Builds-In-A-Task.md) | L | - | A multi-module Maven project behind an in-house repository manager builds in a task: a JDK stands in when its parent went unread, and a mirror that takes every repository reaches the task's settings, so only the mirror's host is opened. |
 | <a id="ec15"></a>[EC15](EC15-What-The-Exact-Version-Step-Left-Unread.md) | - | - | What installing a project's tools in their exact version left unmeasured: a replaced `image.run`, the HTTP client's size, GraalVM's next asset names, Python's digests, and the online step's time. |
 
 ## Finished
