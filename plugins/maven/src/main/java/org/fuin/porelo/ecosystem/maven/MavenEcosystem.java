@@ -16,6 +16,7 @@ import org.fuin.porelo.ecosystem.api.Ecosystem;
 import org.fuin.porelo.ecosystem.api.EcosystemMain;
 import org.fuin.porelo.ecosystem.api.EcosystemProtocol;
 import org.fuin.porelo.ecosystem.api.EcosystemRefused;
+import org.fuin.porelo.ecosystem.api.Extension;
 import org.fuin.porelo.ecosystem.api.File;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.api.Repository;
@@ -129,6 +130,11 @@ public final class MavenEcosystem implements Ecosystem {
     @Override
     public List<File> configure(List<Repository> repositories) {
         return MavenSettingsFile.of(repositories);
+    }
+
+    @Override
+    public List<File> configure(List<Repository> repositories, Extension extension) {
+        return MavenSettingsFile.of(repositories, MavenExtension.mirrorOf(extension, repositories));
     }
 
     private static List<Finding> ofHost(RepositoryHost host) {

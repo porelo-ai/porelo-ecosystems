@@ -10,8 +10,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import org.fuin.porelo.ecosystem.api.Detection;
 import org.fuin.porelo.ecosystem.api.EcosystemRefused;
+import org.fuin.porelo.ecosystem.api.Extension;
 import org.fuin.porelo.ecosystem.api.File;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.api.Repository;
@@ -1739,6 +1741,68 @@ class MavenEcosystemTest {
                     .as("written as text, not as markup")
                     .contains("<id>a&amp;b</id>")
                     .contains("?x=&lt;y&gt;");
+        }
+
+        private static final Repository INHOUSE =
+                new Repository("inhouse", "http://127.0.0.1:9420/inhouse/");
+
+        private static String settingsFor(Map<String, Object> extension) {
+            return new MavenEcosystem()
+                    .configure(List.of(INHOUSE), new Extension(extension))
+                    .get(0)
+                    .content();
+        }
+
+        /**
+         * Harm prevented: a repository the person's mirror takes is sent past it, where the egress
+         * refuses it.
+         */
+        @Test
+        void aMirrorOfEveryRepositoryTakesEveryRepositoryToTheBroker() {
+            String settings = settingsFor(Map.of("mirrorOf", Map.of("inhouse", "*")));
+
+            assertThat(settings)
+                    .as("Maven's own Central goes to the broker too")
+                    .contains("<mirrorOf>*</mirrorOf>")
+                    .doesNotContain("<mirrorOf>inhouse</mirrorOf>");
+        }
+
+        @Test
+        void withoutTheExtensionARepositoryTakesOnlyItself() {
+            assertThat(
+                            new MavenEcosystem()
+                                    .configure(List.of(INHOUSE), Extension.NONE)
+                                    .get(0)
+                                    .content())
+                    .contains("<mirrorOf>inhouse</mirrorOf>");
+        }
+
+        /** Harm prevented: a block Porelo passes unread changes the task's settings unchecked. */
+        @ParameterizedTest
+        @ValueSource(strings = {"notAMap", "badPattern", "unknownName", "unknownKey"})
+        void aBlockThatDoesNotFitIsRefusedNamingItsKeyButNotItsValue(String which) {
+            Map<String, Object> block =
+                    switch (which) {
+                        case "notAMap" -> Map.of("mirrorOf", "s3cr3t");
+                        case "badPattern" -> Map.of("mirrorOf", Map.of("inhouse", "s3cr3t;x"));
+                        case "unknownName" -> Map.of("mirrorOf", Map.of("other", "s3cr3t"));
+                        default -> Map.of("s3cr3tKey", "s3cr3t");
+                    };
+
+            assertThatThrownBy(() -> settingsFor(block))
+                    .as("refused as unreadable")
+                    .isInstanceOfSatisfying(
+                            EcosystemRefused.class,
+                            e -> {
+                                assertThat(e.reason())
+                                        .isEqualTo(EcosystemRefused.Reason.UNREADABLE);
+                                assertThat(e.detail())
+                                        .as("names the key")
+                                        .contains("extensions.maven");
+                                assertThat(e.detail().replace("s3cr3tKey", ""))
+                                        .as("never a value")
+                                        .doesNotContain("s3cr3t");
+                            });
         }
     }
 

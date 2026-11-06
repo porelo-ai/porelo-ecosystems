@@ -89,8 +89,8 @@ value. Detection names an encrypted secret as such and tells the person to store
   extension, never reads it for its egress, and hands it back to `configure`, which writes it as that repository's
   `<mirrorOf>`, so a mirror of `*` reaches the broker for every repository. An id outside `[A-Za-z0-9_-]` or longer than
   64, or a `<mirrorOf>` outside `[A-Za-z0-9_.:*!,-]`, is answered unknown at its line and never sent: Maven splits
-  `<mirrorOf>` at commas and trims no part, so a space changes what it takes and is not dropped. `configure` reads the
-  extension once Porelo's contract library passes it.
+  `<mirrorOf>` at commas and trims no part, so a space changes what it takes and is not dropped. `configure` reads it from
+  the extension Porelo's contract library passes.
 - **The image's Maven.** Where the person's settings mirror every repository, `resolve` fetches Maven through that
   mirror at the same path, with its digest from the same mirror.
 - **Red first**, in `MavenEcosystemTest`, `SettingsReaderTest` and the real-Maven comparison: an unread parent answers a
@@ -110,9 +110,16 @@ value. Detection names an encrypted secret as such and tells the person to store
   and log for the invented secrets finds none.
 - Settings with an unquoted attribute value answer a warning at that file and the rest of the checkout.
 
+## Measured
+
+- Maven 3.9.16, with the settings `configure` writes for an invented mirror of `*` against a local stand-in manager on
+  `127.0.0.1`, resolves a parent only the stand-in holds and an import Maven looks up in Central, from the stand-in; so
+  it does without the profile. For an import found nowhere, the same settings ask the stand-in alone, while settings
+  whose mirror takes only itself, as before, also ask `repo.maven.apache.org` and a repository a pom declares, which a
+  task's egress refuses.
+
 ## To be checked
 
-- That the mirror of `*` alone, without the profile, resolves the parent and Central's artifacts, by real Maven.
 - How Maven 4 reads `settings-security4.xml` and writes its encrypted form, against a real Maven 4.
 - Whether Porelo's image build reaches the vendors' hosts on a network that reaches only the mirror, and where the
   stand-in JDK's package comes from there.

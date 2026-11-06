@@ -1,6 +1,7 @@
 package org.fuin.porelo.ecosystem.maven;
 
 import java.util.List;
+import java.util.Map;
 import org.fuin.porelo.ecosystem.api.File;
 import org.fuin.porelo.ecosystem.api.Repository;
 
@@ -17,7 +18,7 @@ final class MavenSettingsFile {
             """
                 <mirror>
                   <id>%1$s</id>
-                  <mirrorOf>%1$s</mirrorOf>
+                  <mirrorOf>%3$s</mirrorOf>
                   <url>%2$s</url>
                 </mirror>
             """;
@@ -49,12 +50,27 @@ final class MavenSettingsFile {
 
     /** No credential stands in it: the broker adds that, so the file needs no guarding. */
     static List<File> of(List<Repository> repositories) {
+        return of(repositories, Map.of());
+    }
+
+    /**
+     * The settings, each repository's mirror taking what the project's extension says.
+     *
+     * @param repositories the repositories the task reaches through the broker
+     * @param mirrorOf what a repository's mirror takes, by its name; one not named takes itself
+     */
+    static List<File> of(List<Repository> repositories, Map<String, String> mirrorOf) {
         if (repositories.isEmpty()) {
             return List.of();
         }
         StringBuilder xml = new StringBuilder(HEAD);
         repositories.forEach(
-                r -> xml.append(MIRROR.formatted(escaped(r.name()), escaped(r.url()))));
+                r ->
+                        xml.append(
+                                MIRROR.formatted(
+                                        escaped(r.name()),
+                                        escaped(r.url()),
+                                        escaped(mirrorOf.getOrDefault(r.name(), r.name())))));
         xml.append(PROFILE_HEAD);
         section(xml, repositories, "repositories", "repository");
         section(xml, repositories, "pluginRepositories", "pluginRepository");

@@ -1,0 +1,2 @@
+title: Write a task's Maven settings so that a repository's mirror takes what the project's Maven extension says, such as every repository, so the build reaches only the person's mirror through the broker; a block that does not fit is refused naming its key, never a value.
+type: added
