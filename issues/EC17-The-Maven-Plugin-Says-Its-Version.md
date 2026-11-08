@@ -1,6 +1,6 @@
 # EC17 — The Maven Plugin Says Its Version
 
-**Status:** Backlog
+**Status:** Implementing
 **Size:** S - one module and its tests: the pom, one resource the native image must hold, `MavenEcosystem` and a test
 of the built executable; no contract of this repository changes.
 

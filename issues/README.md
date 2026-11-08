@@ -19,6 +19,7 @@ out.
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
 | <a id="ec13"></a>[EC13](EC13-The-Maven-Adapter-Judged-By-Real-Builds.md) | L | - | The Maven adapter judged by whether a real build runs in a real task, on a corpus of open source projects, with each fault fixed in the Java code alone. |
+| <a id="ec17"></a>[EC17](EC17-The-Maven-Plugin-Says-Its-Version.md) | S | - | The Maven plugin answers with the version it was built as when Porelo asks it to describe itself, taken from its build, so a person can tell which build answered. |
 
 ## Backlog
 
@@ -26,7 +27,6 @@ out.
 |---|---|---|---|
 | <a id="ec11"></a>[EC11](EC11-The-Word-Ecosystem-Adapter.md) | M | - | "Ecosystem adapter" replaces "plugin" for what Porelo finds at run time, before a first release fixes the word: `plugins/` becomes `adapters/`, with every text a person reads; the package and installed paths stay. |
 | <a id="ec12"></a>[EC12](EC12-A-Default-Host-Says-It-Is-Maven-s-Own.md) | XS | - | A host that comes from no file, such as Maven's built-in Central, says in its note that it is Maven's built-in default. |
-| <a id="ec17"></a>[EC17](EC17-The-Maven-Plugin-Says-Its-Version.md) | S | - | The Maven plugin answers with the version it was built as when Porelo asks it to describe itself, taken from its build, so a person can tell which build answered. |
 
 ## Analyzed
 
