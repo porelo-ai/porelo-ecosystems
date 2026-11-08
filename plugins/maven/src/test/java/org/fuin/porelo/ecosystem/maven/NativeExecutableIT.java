@@ -22,6 +22,7 @@ import org.fuin.porelo.ecosystem.api.Detection;
 import org.fuin.porelo.ecosystem.api.File;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.api.InstalledEcosystem;
+import org.fuin.porelo.ecosystem.api.InstalledEcosystems;
 import org.fuin.porelo.ecosystem.api.Repository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -73,6 +74,27 @@ class NativeExecutableIT {
                     .isEqualTo(new MavenEcosystem().detect(f.checkout, f.home));
             assertThat(answered.asMap().toString()).doesNotContain("hunter2");
         }
+    }
+
+    /** Harm prevented: the installed plugin cannot say which build it is. */
+    @Test
+    void theExecutableDescribesItselfWithThePackageVersion() throws IOException {
+        Path installed = executable();
+
+        List<InstalledEcosystems.Description> described =
+                InstalledEcosystems.all(List.of(installed.getParent()));
+
+        assertThat(described)
+                .as("the one plugin installed, accepted")
+                .singleElement()
+                .satisfies(
+                        each -> {
+                            assertThat(each.refusal()).as("why it was refused").isNull();
+                            assertThat(each.version())
+                                    .as("the package version this build makes")
+                                    .isNotBlank()
+                                    .isEqualTo(System.getProperty("test.package.version"));
+                        });
     }
 
     /** Harm prevented: the settings a task needs never arrive from the installed plugin. */

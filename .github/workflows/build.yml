@@ -109,14 +109,18 @@ jobs:
                       echo "$1"
                   }
                   answers() {
-                      local said
+                      local said expected
                       said="$(env -i "$1/usr/libexec/porelo/ecosystems/maven" describe)"
+                      expected="{\"protocolVersion\":3,\"ecosystem\":\"maven\",\"version\":\"$version\"}"
                       echo "  $2 answers $said"
-                      [ "$said" = '{"protocolVersion":2,"ecosystem":"maven"}' ] \
-                          || { echo "::error::$2 answered '$said'"; exit 1; }
+                      [ "$said" = "$expected" ] \
+                          || { echo "::error::$2 answered '$said', not '$expected'"; exit 1; }
                   }
                   deb="$(only plugins/maven/target/*.deb)"
                   rpm="$(only plugins/maven/target/*.rpm)"
+                  # The version the package carries, which check-package-version holds the .rpm to as well.
+                  version="$(basename "$deb" _amd64.deb)"
+                  version="${version#porelo-ecosystem-maven_}"
                   dpkg-deb -x "$deb" "$RUNNER_TEMP/deb"
                   answers "$RUNNER_TEMP/deb" "$(basename "$deb")"
                   mkdir "$RUNNER_TEMP/rpm"

@@ -218,6 +218,9 @@
     },
     {
       "glob": "org/apache/maven/model/pom-4.0.0.xml"
+    },
+    {
+      "glob": "org/fuin/porelo/ecosystem/maven/version.properties"
     }
   ]
 }

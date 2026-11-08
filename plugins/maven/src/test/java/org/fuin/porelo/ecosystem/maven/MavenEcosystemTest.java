@@ -55,6 +55,15 @@ class MavenEcosystemTest {
                 .formatted(group, artifact, body);
     }
 
+    /** Harm prevented: a person cannot tell which build of the plugin answered. */
+    @Test
+    void theVersionIsTheOneThePackageIsBuiltAs() {
+        assertThat(new MavenEcosystem().version())
+                .as("the package version this build makes, never one written by hand")
+                .isNotBlank()
+                .isEqualTo(System.getProperty("test.package.version"));
+    }
+
     /** Harm prevented: Porelo offers a plugin for a directory that holds nothing of its tool. */
     @Test
     void aDirectoryWithoutAPomIsNotRecognized() {

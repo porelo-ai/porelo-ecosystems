@@ -56,6 +56,16 @@
         </dependency>
     </dependencies>
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+            </resource>
+            <!-- Only what must carry a build value is filtered, so nothing else loses a ${...} it means literally. -->
+            <resource>
+                <directory>src/main/resources-filtered</directory>
+                <filtering>true</filtering>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -70,8 +80,30 @@
                         <test.maven.wrapper>${maven.multiModuleProjectDirectory}/mvnw</test.maven.wrapper>
                         <test.maven.repository>${settings.localRepository}</test.maven.repository>
                         <test.maven.help.version>${maven-help-plugin.version}</test.maven.help.version>
+                        <test.package.version>${package.version}</test.package.version>
                     </systemPropertyVariables>
                 </configuration>
+            </plugin>
+            <!-- The package's version, <version>~snapshot.<run> for a snapshot: the plugin says it, and the package carries it. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>package-version</id>
+                        <phase>validate</phase>
+                        <goals>
+                            <goal>regex-property</goal>
+                        </goals>
+                        <configuration>
+                            <name>package.version</name>
+                            <value>${project.version}</value>
+                            <regex>-SNAPSHOT$</regex>
+                            <replacement>~snapshot.${package.snapshot.run}</replacement>
+                            <failIfNoMatch>false</failIfNoMatch>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>
@@ -113,6 +145,7 @@
                         <configuration>
                             <systemPropertyVariables>
                                 <test.native.executable>${project.build.directory}/${project.artifactId}</test.native.executable>
+                                <test.package.version>${package.version}</test.package.version>
                             </systemPropertyVariables>
                         </configuration>
                         <executions>
@@ -121,26 +154,6 @@
                                     <goal>integration-test</goal>
                                     <goal>verify</goal>
                                 </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.codehaus.mojo</groupId>
-                        <artifactId>build-helper-maven-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>package-version</id>
-                                <phase>validate</phase>
-                                <goals>
-                                    <goal>regex-property</goal>
-                                </goals>
-                                <configuration>
-                                    <name>package.version</name>
-                                    <value>${project.version}</value>
-                                    <regex>-SNAPSHOT$</regex>
-                                    <replacement>~snapshot.${package.snapshot.run}</replacement>
-                                    <failIfNoMatch>false</failIfNoMatch>
-                                </configuration>
                             </execution>
                         </executions>
                     </plugin>

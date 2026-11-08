@@ -1,12 +1,14 @@
 package org.fuin.porelo.ecosystem.maven;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import org.fuin.porelo.ecosystem.api.Detection;
@@ -27,6 +29,8 @@ import org.jspecify.annotations.Nullable;
 public final class MavenEcosystem implements Ecosystem {
     /** The name its executable is installed under. */
     public static final String NAME = "maven";
+
+    private static final String VERSION_RESOURCE = "version.properties";
 
     private final Function<String, @Nullable String> environment;
     private final Function<Map<String, String>, ToolDownloads.Fetch> vendors;
@@ -55,6 +59,31 @@ public final class MavenEcosystem implements Ecosystem {
     @Override
     public String ecosystem() {
         return NAME;
+    }
+
+    /**
+     * Returns the version of the package this plugin was built in, which its build writes.
+     *
+     * @throws IllegalStateException When the build wrote none: a plugin that cannot say which build
+     *     it is must not pass for one.
+     */
+    @Override
+    public String version() {
+        Properties written = new Properties();
+        try (InputStream in = MavenEcosystem.class.getResourceAsStream(VERSION_RESOURCE)) {
+            if (in == null) {
+                throw new IllegalStateException(VERSION_RESOURCE + " is not in the plugin");
+            }
+            written.load(in);
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot read " + VERSION_RESOURCE, e);
+        }
+        String version = written.getProperty("version", "");
+        if (version.isBlank() || version.contains("${")) {
+            throw new IllegalStateException(
+                    VERSION_RESOURCE + " holds no version the build wrote: '" + version + "'");
+        }
+        return version;
     }
 
     @Override
