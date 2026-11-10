@@ -5,8 +5,8 @@
   "$schema": "issue-1.json",
   "id": "EC21",
   "title": "The Maven Adapter Ships Its Third-Party Notices",
-  "state": "Backlog",
-  "size": "-",
+  "state": "Implementing",
+  "size": "S",
   "priority": "Medium",
   "rank": 3,
   "blockedBy": [],
@@ -14,8 +14,11 @@
 }
 ```
 
-**How it stands.** Backlog on the operator's word (operator, 2026-11-10): built at this repository's turn, behind its
-Highest and High work, with the shared notices generator now published.
+**Why this size.** one module's build and its two package descriptions, one test, no contract; the generator is
+the shared one.
+
+**How it stands.** Backlog on the operator's word (operator, 2026-11-10); taken at once on the coordinator's word, built
+with the shared notices generator now published.
 
 **What must be true.** Whoever installs `porelo-ecosystem-maven`, as a .deb or an .rpm, finds beside the package's
 own license one `THIRD-PARTY-NOTICES` file with the full license and notice texts of every third-party library compiled
