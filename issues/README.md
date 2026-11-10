@@ -14,13 +14,13 @@ out.
 | <a id="ec10"></a>[EC10](EC10-The-Reason-A-Plugin-Has-Nothing-To-Secure.md) | XS | - | The rule that a plugin has nothing to secure says its real reason: the plugin runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control. |
 | <a id="ec16"></a>[EC16](EC16-A-Project-Behind-An-In-House-Repository-Manager-Builds-In-A-Task.md) | M | - | A multi-module Maven project behind an in-house repository manager builds in a task: a JDK stands in when its parent went unread, a mirror that takes every repository reaches the task's settings, a credential is named in its form without its value, and settings that do not parse are warned of. |
 | <a id="ec17"></a>[EC17](EC17-The-Maven-Plugin-Says-Its-Version.md) | S | - | The Maven plugin answers with the version it was built as when Porelo asks it to describe itself, taken from its build, so a person can tell which build answered. |
+| <a id="ec12"></a>[EC12](EC12-A-Default-Host-Says-It-Is-Maven-s-Own.md) | XS | - | A host that comes from no file, such as Maven's built-in Central, says in its note that it is Maven's built-in default. |
 
 ## Implementing
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
 | <a id="ec13"></a>[EC13](EC13-The-Maven-Adapter-Judged-By-Real-Builds.md) | L | - | The Maven adapter judged by whether a real build runs in a real task, on a corpus of open source projects, with each fault fixed in the Java code alone. |
-| <a id="ec12"></a>[EC12](EC12-A-Default-Host-Says-It-Is-Maven-s-Own.md) | XS | - | A host that comes from no file, such as Maven's built-in Central, says in its note that it is Maven's built-in default. |
 
 ## Backlog
 
@@ -44,6 +44,7 @@ out.
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
 | <a id="ec15"></a>[EC15](EC15-What-The-Exact-Version-Step-Left-Unread.md) | - | - | What installing a project's tools in their exact version left unmeasured: a replaced `image.run`, the HTTP client's size, GraalVM's next asset names, Python's digests, and the online step's time. |
+| <a id="ec19"></a>[EC19](EC19-A-Central-Moved-By-A-Property-Names-Its-File.md) | - | - | A Central moved by the property `maven.repo.central` is answered with the file and line that set it, not as the machine's with no file. |
 
 ## Finished
 

@@ -1368,6 +1368,30 @@ class MavenEcosystemTest {
             assertThat(central.file()).as("the contract's way of saying no file").isEmpty();
         }
 
+        /**
+         * Harm prevented: a host the checkout chose passes for Maven's own Central, and the person
+         * lets it in without reading it.
+         */
+        @Test
+        void aCentralTheCheckoutMovedElsewhereIsNotCalledMavensBuiltIn() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            "<properties><maven.repo.central>https://corp.example.org/m2"
+                                    + "</maven.repo.central></properties>"));
+
+            assertThat(detect().findings())
+                    .as("the moved Central, as a repository and a plugin repository")
+                    .filteredOn(x -> x.key().equals("host.corp.example.org"))
+                    .hasSize(2)
+                    .allSatisfy(
+                            x ->
+                                    assertThat(x.note())
+                                            .as("not Maven's default")
+                                            .doesNotContain("built-in"));
+        }
+
         @Test
         void whatIsUnknownCrossesTheContractWithItsPlace() throws IOException {
             f.pom("pom.xml", project("child", repository("r", "https://${nope}/m")));

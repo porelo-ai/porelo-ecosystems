@@ -200,7 +200,18 @@ public final class MavenEcosystem implements Ecosystem {
                     case PLUGIN_REACHES -> "the plugin ";
                     case PROXY -> "proxy ";
                 };
-        return what + host.id() + " at " + host.url();
+        // A checkout can move the super POM's Central by a property and still leave it no file.
+        boolean builtIn =
+                host.place().file().isEmpty()
+                        && (host.kind() == RepositoryHost.Kind.REPOSITORY
+                                || host.kind() == RepositoryHost.Kind.PLUGIN_REPOSITORY)
+                        && withoutEndSlash(host.url())
+                                .equals(withoutEndSlash(ToolDownloads.CENTRAL));
+        return (builtIn ? "Maven's built-in " : "") + what + host.id() + " at " + host.url();
+    }
+
+    private static String withoutEndSlash(String url) {
+        return url.endsWith("/") ? url.substring(0, url.length() - 1) : url;
     }
 
     private static Finding ofUnknown(UnknownValue unknown) {
