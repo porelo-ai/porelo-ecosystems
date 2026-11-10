@@ -2,7 +2,7 @@
 # Judges an ecosystem adapter by real builds. usage: corpus.sh <tool.conf> <name> <https url> <reference tool version> [commit]
 # The conf defines REFERENCE_IMAGE, CACHE_MOUNT, DOWNLOADED, reference_setup, build_command <checkout> <stage> and
 # known_gap <log> <container>; everything else is the tool's own.
-# On an account kept for it: it clears the projects it makes, and fills the tool's cache.
+# On an account kept for it: it removes the repository its first start adds to the project 'default', and fills the tool's cache.
 # Each project: plain git clone, a reference build without Porelo, Porelo's real first start and its yes, a task with
 # the stub, the build by podman exec as the session has it, what the firewall refused. Stops at the first stage that fails.
 set -euo pipefail
@@ -35,6 +35,8 @@ mkdir "$RUN"
 say() { echo "[$NAME] $*" | tee -a "$RUN/summary.txt"; }
 call() { varlinkctl call --timeout=300 "$SOCKET" "org.fuin.porelo.Tasks1.$1" "$2"; }
 PROJECT=""
+REPOSITORY=""
+CONFIRMED=""
 CONTAINER=""
 IMAGE=""
 cleanup() {
@@ -43,8 +45,11 @@ cleanup() {
     if [ -n "$CONTAINER" ] && podman container exists "$CONTAINER" 2>/dev/null; then
         porelo task remove --force --no-input "$CONTAINER" >/dev/null 2>&1 || say "LEFT: task $CONTAINER"
     fi
-    if [ -n "$PROJECT" ]; then
-        porelo project clear "$PROJECT" --yes --force >/dev/null 2>&1 || say "LEFT: project $PROJECT"
+    # The built-in project 'default' stays; only the repository the first start added to it goes.
+    if [ -n "$REPOSITORY" ]; then
+        porelo project default remove "$REPOSITORY" >/dev/null 2>&1 || say "LEFT: repository $REPOSITORY in default"
+    elif [ -n "$CONFIRMED" ]; then
+        say "LEFT: the repository of $WORK, in ${PROJECT:-a project not read}"
     fi
     if [ -n "$IMAGE" ] && podman image exists "$IMAGE" 2>/dev/null; then podman rmi -f "$IMAGE" >/dev/null 2>&1 || say "LEFT: image $IMAGE"; fi
     exit "$status"
@@ -54,7 +59,8 @@ trap cleanup EXIT
 rm -rf "$WORK"
 mkdir -p "$(dirname "$WORK")"
 git clone -q "$URL" "$WORK"
-[ -z "$COMMIT" ] || git -C "$WORK" checkout -q "$COMMIT"
+# A task starts from a branch, never from a detached checkout.
+[ -z "$COMMIT" ] || git -C "$WORK" checkout -q -B corpus "$COMMIT"
 COMMIT=$(git -C "$WORK" rev-parse HEAD)
 say "clone $URL at $COMMIT"
 
@@ -88,24 +94,39 @@ say "first start: $OUTCOME; hosts: $(jq -r '.hosts|join(" ")' "$RUN/first-start.
 jq -r '.found[]|select(.unknown)|"  unknown \(.key): \(.note)"' "$RUN/first-start.json" | cut -c1-200 | tee -a "$RUN/summary.txt"
 jq -r '.file' "$RUN/first-start.json" >"$RUN/question-file.txt"
 HASH=$(jq -r .hash "$RUN/first-start.json")
+CONFIRMED=yes
 call ConfirmFirstStart "$(jq -cn --arg c "$WORK" --arg h "$HASH" '{checkout:$c,hash:$h}')" >"$RUN/confirm.json" 2>"$RUN/confirm.err" || {
     cat "$RUN/confirm.err" | tee -a "$RUN/summary.txt"
     say "RESULT: the yes was refused"
     exit 1
 }
 PROJECT=$(jq -r .project "$RUN/confirm.json")
-cp "$WORK/project.yml" "$RUN/project.yml"
-say "project: $PROJECT"
-grep -E 'install |domains|^ *- "' "$RUN/project.yml" | cut -c1-140 | tee -a "$RUN/summary.txt" || true
+[ "$PROJECT" = default ] || {
+    say "RESULT: the first start made a project of its own, $PROJECT, where this Porelo adds to 'default'"
+    exit 1
+}
+# The repository the first start added: the entry '<name>  <path>', name padded, whose path, spaces and all, is this checkout.
+porelo project default list >"$RUN/default.txt" 2>&1 || {
+    say "RESULT: the project 'default' could not be listed"
+    exit 1
+}
+REPOSITORY=$(WORK=$WORK awk '{ name = $1; path = $0; sub(/^[^ \t]+[ \t]+/, "", path) } path == ENVIRON["WORK"] { print name; exit }' "$RUN/default.txt")
+cp "$WORK/porelo.yml" "$RUN/porelo.yml"
+say "project: $PROJECT, repository: ${REPOSITORY:-none}"
+grep -E 'install |domains|^ *- ' "$RUN/porelo.yml" | cut -c1-140 | tee -a "$RUN/summary.txt" || true
 
 # The task with the stub.
 TASK=c
-CONTAINER=porelo-$PROJECT-$TASK
-REPOSITORY=$(sed -n '/^repositories:/,$p' "$RUN/project.yml" | sed -n 's/^  "\{0,1\}\([^":# ]*\)"\{0,1\}:.*/\1/p' | head -1)
 [ -n "$REPOSITORY" ] || {
-    say "RESULT: the file names no repository"
+    say "RESULT: the first start added no repository"
     exit 1
 }
+# A task of that name from before is not this run's to remove.
+! podman container exists "porelo-$PROJECT-$TASK" 2>/dev/null || {
+    say "RESULT: a task porelo-$PROJECT-$TASK is there from before"
+    exit 1
+}
+CONTAINER=porelo-$PROJECT-$TASK
 START=$(date +%s)
 RC=0
 (cd "$WORK" && timeout 30m porelo task start "$TASK" -p "$PROJECT" -r "$REPOSITORY" --agent stub --attach shell --clearance=deny --detach --no-input --yes) >"$RUN/start.log" 2>&1 || RC=$?
@@ -166,7 +187,24 @@ python3 - "$RUN" "$DOWNLOADED" >>"$RUN/hosts.txt" <<'PY'
 import glob, os, re, sys
 run = sys.argv[1]
 read = lambda n: open(os.path.join(run, n), errors="replace").read() if os.path.exists(os.path.join(run, n)) else ""
-domains = re.findall(r'^\s+- "([^"]+)"', read("project.yml"), re.M)
+def egress_domains(text):
+    # Only the list under egress: domains:, each item without its quotes or comment.
+    found, inside, depth = [], None, -1
+    for line in text.splitlines():
+        indent = len(line) - len(line.lstrip())
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if indent == 0:
+            inside = "egress" if line.rstrip() == "egress:" else None
+            depth = -1
+        elif inside == "egress" and line.strip() == "domains:":
+            depth = indent
+        elif depth >= 0 and indent <= depth:
+            depth = -1
+        elif depth >= 0 and line.lstrip().startswith("- "):
+            found.append(re.sub(r"\s+#.*$", "", line.lstrip()[2:]).strip().strip("'\""))
+    return found
+domains = egress_domains(read("porelo.yml"))
 stub = {"example.com", "example.net", "api.anthropic.com"}
 asked = set(re.findall(r"query\[[A-Z]+\] (\S+)", read("dnsmasq.log")))
 print("refused: " + (", ".join(sorted(h for h in asked if h not in domains and h not in stub and "." in h)) or "none"))
