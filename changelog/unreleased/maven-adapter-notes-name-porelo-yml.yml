@@ -1,0 +1,2 @@
+title: The Maven adapter's notes that say what to write name `porelo.yml`, the file Porelo writes into the checkout, instead of `project.yml`.
+type: changed

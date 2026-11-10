@@ -29,7 +29,7 @@ manager. An always-active profile names the same manager as repository and plugi
 section, and attribute values stand without quotes, so the file does not parse.
 
 Measured on invented fixtures of that shape (`org.example`, a root with two modules and a property the parent binds, a
-mirror at `repo.example.org`), with the plugin built from `main`:
+mirror at `repo.example.org`), with the adapter built from `main`:
 
 - **Parent not in the local repository.** `detect` answers `java.version` unknown at `pom.xml` line 0, `maven.version`
   empty, `package.maven`, and the parent as unknown at its own line. No JDK package is named. `resolve` turns the empty
@@ -63,7 +63,7 @@ Only the person's local caches are read while detecting, so fetching the missing
   settings, or named by `-Dsettings.security`), which itself is only obscured by a key Maven ships. Maven 4 encrypts with
   a master password it takes from a source configured in `settings-security4.xml`, written `{[…]…}`.
 
-Porelo does not decrypt either form: decrypting would put the secret into the plugin, which never holds a credential's
+Porelo does not decrypt either form: decrypting would put the secret into the adapter, which never holds a credential's
 value. Detection names an encrypted secret as such and tells the person to store the plain value in the Porelo-Vault.
 
 ## Plan
@@ -126,6 +126,6 @@ value. Detection names an encrypted secret as such and tells the person to store
 - How Maven 4 reads `settings-security4.xml` and writes its encrypted form, against a real Maven 4.
 - Whether Porelo's image build reaches the vendors' hosts on a network that reaches only the mirror, and where the
   stand-in JDK's package comes from there.
-- Where a first start's note on an imported BOM it could not read comes from: the plugin answers no finding for an
+- Where a first start's note on an imported BOM it could not read comes from: the adapter answers no finding for an
   import, since its first phase stops before imports.
 - That Porelo's draft shows the stand-in JDK as something for the person to confirm, as it shows any unknown value.

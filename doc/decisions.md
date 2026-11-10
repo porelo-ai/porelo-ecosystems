@@ -1,19 +1,19 @@
 # Decisions
 
-The choices the build-tool plugins are built on, each with why it holds.
+The choices the ecosystem adapters are built on, each with why it holds.
 
 | Subject | What holds | Link |
 |---|---|---|
-| A plugin has nothing to secure | it runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control; so it aims at the hosts the real build would reach, each with its file and line, no password appears, and a broken or huge pom gets an answer, not a crash | [entry](#a-plugin-has-nothing-to-secure) |
+| An adapter has nothing to secure | it runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control; so it aims at the hosts the real build would reach, each with its file and line, no password appears, and a broken or huge pom gets an answer, not a crash | [entry](#an-adapter-has-nothing-to-secure) |
 | An adapter is judged by real builds | open source projects, by a plain clone at pinned commits, must build in a real task from the file Porelo's own first start writes, with only the adapter's code fixed | [entry](#an-adapter-is-judged-by-real-builds) |
 | The Maven answer follows real Maven | where Maven's behavior is not obvious, the answer does what real Maven was measured doing; what stays out of it is named | [entry](#the-maven-answer-follows-real-maven) |
 | A project's tools are fetched by URL and digest | the JDK, Maven and GraalVM come from their vendors' archives, each checked against the digest its vendor names, in ordinary image lines the person can read and change; no tool manager, and pre-releases never count | [entry](#a-projects-tools-are-fetched-by-url-and-digest) |
 
-## A plugin has nothing to secure
+## An adapter has nothing to secure
 
-A plugin may run on a checkout just cloned, before the person has said anything. It runs no code of the project and stays bounded, by its limits on what it reads and by Porelo's limit on each call. Porelo treats its answer as untrusted input, and nothing in that answer takes effect until the person has read it and confirmed it: the confirmation is the control, not the plugin. A plugin's task is to make the developer's start easier by reading what the build would use.
+An adapter may run on a checkout just cloned, before the person has said anything. It runs no code of the project and stays bounded, by its limits on what it reads and by Porelo's limit on each call. Porelo treats its answer as untrusted input, and nothing in that answer takes effect until the person has read it and confirmed it: the confirmation is the control, not the adapter. An adapter's task is to make the developer's start easier by reading what the build would use.
 
-So the aim is the right answer: the same hosts the developer's real build would reach, each with its file and line. A finding against a plugin is a wrong answer, never a security finding, and no hostile checkout is hardened against.
+So the aim is the right answer: the same hosts the developer's real build would reach, each with its file and line. A finding against an adapter is a wrong answer, never a security finding, and no hostile checkout is hardened against.
 
 What a build reads is input to the answer as it is to the build, and is evaluated where that is simple; what cannot be followed stays an unknown naming it.
 
@@ -23,7 +23,7 @@ The real build runs in the box, so what the box decides is an unknown naming it:
 
 Three things stay: no code of the project runs, no password appears in an answer, and a broken or huge pom gets an answer rather than a crash.
 
-The decision is about what a plugin answers. It says nothing of the agent's box and its egress.
+The decision is about what an adapter answers. It says nothing of the agent's box and its egress.
 
 ## An adapter is judged by real builds
 

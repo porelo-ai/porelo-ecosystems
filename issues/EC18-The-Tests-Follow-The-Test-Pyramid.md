@@ -3,14 +3,14 @@
 **Status:** Accepted.
 **Size:** M - two fixes in the Maven module's tests, one S and one M; no contract and no main code changes.
 
-**What must be true.** Every flow of the Maven plugin is proven by unit tests over fakes, the module's unit suite runs in
+**What must be true.** Every flow of the Maven adapter is proven by unit tests over fakes, the module's unit suite runs in
 under a minute, and only what nothing lower can show runs as an integration test, in the native executable or in a real
 task.
 
 ## The audit
 
 Measured on the host, on `644cf86`, with the pinned GraalVM: `clean verify` took 3:33 min, `-Pnative verify` of the Maven
-module 95 s, of which 64 s built the image. Only `plugins/maven` holds code and tests; `shared`, `gradle`, `npm`, `pip` and
+module 95 s, of which 64 s built the image. Only `adapters/maven` holds code and tests; `shared`, `gradle`, `npm`, `pip` and
 `flutter` are empty modules, with no code and no tests.
 
 | Level | Suites | Tests | Share | Run time |
@@ -52,7 +52,7 @@ reaches Maven Central only when it is missing there; as the oracle of real Maven
 
 ## Acceptance
 
-- `./mvnw test` on `plugins/maven` takes under a minute, measured, and every case in `MergeFixtures` is asserted there.
+- `./mvnw test` on `adapters/maven` takes under a minute, measured, and every case in `MergeFixtures` is asserted there.
 - The comparison with real Maven still runs in `verify` and goes red when a recorded set is changed.
 - The install lines' test goes red with the digest check taken out.
 

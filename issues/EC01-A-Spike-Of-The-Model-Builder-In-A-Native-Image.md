@@ -3,7 +3,7 @@
 **Status:** Review.
 **Size:** S - one throwaway program and one page of what was measured; nothing of it stays but the answer.
 
-**What must be true.** It is known, by measurement, whether MIMA (`eu.maveniverse.maven.mima`) serves the Maven plugin as a native image: that its static runtime builds under GraalVM, how large the executable becomes, that its model API gives the effective model with parents, properties, profiles and imported BOMs merged as Maven merges them, that it refuses to fetch when offline, and that a value of the model can be traced to its file and line.
+**What must be true.** It is known, by measurement, whether MIMA (`eu.maveniverse.maven.mima`) serves the Maven adapter as a native image: that its static runtime builds under GraalVM, how large the executable becomes, that its model API gives the effective model with parents, properties, profiles and imported BOMs merged as Maven merges them, that it refuses to fetch when offline, and that a value of the model can be traced to its file and line.
 
 ## Plan
 
@@ -19,7 +19,7 @@ A program of its own on a branch, never merged, that reads a given checkout and 
 
 ## The answer
 
-**MIMA serves as a native image, and the bare model builder serves better, so the Maven plugin builds on `org.apache.maven:maven-model-builder` alone**, with a resolver that reads only the local repository. Both run Maven's own model builder, so parents, properties, profiles and imported BOMs merge the same way; what MIMA adds is what this repository's rules forbid or do not need.
+**MIMA serves as a native image, and the bare model builder serves better, so the Maven adapter builds on `org.apache.maven:maven-model-builder` alone**, with a resolver that reads only the local repository. Both run Maven's own model builder, so parents, properties, profiles and imported BOMs merge the same way; what MIMA adds is what this repository's rules forbid or do not need.
 
 Measured with MIMA 3.0.1 (Maven 3.10.0, resolver 2.0.24), `maven-model-builder` 3.10.0 and GraalVM 25.4.4.1.1, `-march=x86-64`, on fixtures and on two Porelo repositories. The program is on the local branch `spike/mima-native`.
 
@@ -41,16 +41,16 @@ Measured with MIMA 3.0.1 (Maven 3.10.0, resolver 2.0.24), `maven-model-builder` 
 ### What holds for both
 
 - **"No RepositorySystem present" is missing metadata.** The failing run had the local repository and offline set already; the same settings with metadata answer.
-- **Metadata traced by the agent is not enough.** A pom's `${project.…}` is evaluated by reflection over the model, so a getter no traced run called fails with `MissingReflectionRegistrationError`, an `Error`. A Porelo repository hit this until all 46 model types had their public methods registered, which added about 130 KB. A plugin must register them all and treat such an `Error` as a refusal naming the file.
+- **Metadata traced by the agent is not enough.** A pom's `${project.…}` is evaluated by reflection over the model, so a getter no traced run called fails with `MissingReflectionRegistrationError`, an `Error`. A Porelo repository hit this until all 46 model types had their public methods registered, which added about 130 KB. An adapter must register them all and treat such an `Error` as a refusal naming the file.
 - **File and line**: a repository's `id` and `url` carry both when inherited from a parent by `relativePath`, from a parent in the local repository and from a default-active profile, with properties interpolated. Super POM values name an internal resource, not a file.
 - **The settings model has no locations.** A hardened StAX walk gives file and line for mirrors, server ids and profile repositories, and runs in the native image. The answer's settings part must be read that way in either variant.
 - **A settings profile's repositories are not in MIMA's effective model**, only among its context repositories without a location. The bare variant must inject them itself; not yet run.
 - **An imported BOM's repositories do not reach the effective model**, as in Maven; its managed dependencies do. A missing BOM still fails the build of the model.
 - **Offline**: without network, through `unshare --user --map-root-user --net`, a remote parent or BOM fails in under 30 ms and nothing waits. On the JVM, with MIMA's offline flag and the network up, a local trap server got no request; with the flag off it got two, so that flag is all that stands between MIMA and the network. Under `strace`, on the checkout with extensions, neither variant connected anywhere but to the local name service cache socket.
-- **`.mvn/extensions.xml`** is not opened by either (`strace`), and build extensions in a pom load nothing: the model builds with no request for them. Naming the file is the plugin's own check.
-- **A hostile pom**: an external entity and nested entities are refused with the entity's name, and neither the file's content nor an expansion appears; the parser ignores the internal DTD. No size limit exists, so a plugin checks the size first.
+- **`.mvn/extensions.xml`** is not opened by either (`strace`), and build extensions in a pom load nothing: the model builds with no request for them. Naming the file is the adapter's own check.
+- **A hostile pom**: an external entity and nested entities are refused with the entity's name, and neither the file's content nor an expansion appears; the parser ignores the internal DTD. No size limit exists, so an adapter checks the size first.
 - **Interpolation**: `${env.X}`, `${user.name}` and `${settings.servers[0].password}` stay literal in both, with no secret in any output. `${project.basedir}` and `${project.pomFile}` do interpolate, so a url can carry the checkout's local path. `${project.class.classLoader}` stays literal in the native image but expands on the JVM.
-- **A `relativePath` leaving the checkout is followed**, and its values enter the model. The plugin must compare each value's file with the checkout and the local repository, and name any other.
+- **A `relativePath` leaving the checkout is followed**, and its values enter the model. The adapter must compare each value's file with the checkout and the local repository, and name any other.
 
 ### What MIMA would still need
 

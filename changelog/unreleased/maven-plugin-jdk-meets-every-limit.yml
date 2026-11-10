@@ -1,2 +1,0 @@
-title: The Maven plugin's draft installs a JDK that meets every limit a build states, such as an enforcer rule asking for more than the compiler's level.
-type: fixed

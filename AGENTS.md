@@ -537,30 +537,30 @@ and the UTC time that text last changed; change it in the channel first, never i
 
 ## What this repository is
 
-The build-tool plugins of Porelo, one Maven module per build tool: Maven first, then Gradle, npm, pip and Flutter. A
-plugin is a native executable of its own, found by Porelo at run time and spoken to over a varlink contract; Porelo names
-no build tool. What a plugin answers becomes a tools draft and a rules draft for the person to read.
+The ecosystem adapters of Porelo, one Maven module per build tool: Maven first, then Gradle, npm, pip and Flutter. An
+adapter is a native executable of its own, found by Porelo at run time and spoken to over a varlink contract; Porelo
+names no build tool. What an adapter answers becomes a tools draft and a rules draft for the person to read.
 
-- **A plugin never runs the project's code**: no build tool, no wrapper, no build script, no Maven core extension, no
+- **An adapter never runs the project's code**: no build tool, no wrapper, no build script, no Maven core extension, no
   plugin of the project's. It reads files and the models built from them.
-- **A plugin has nothing to secure, because it is not the control.** It runs no code of the project and stays bounded,
+- **An adapter has nothing to secure, because it is not the control.** It runs no code of the project and stays bounded,
   also on a checkout just cloned; its answer is untrusted input to Porelo, and the person's confirmation is the control.
   So it aims at the right answer: the hosts the real build would reach. What the build reads is input to the answer; no
-  hostile checkout is hardened against, and a finding against a plugin is a wrong answer, never a security finding.
-- **A plugin reaches no network while it reads a checkout or the person's settings.** What the build would fetch is read
-  from the person's local caches only; a value that sits in something not found there is named as unknown, with where it
-  is set, never guessed.
-- **The one online step is when `project.yml` is made:** a plugin asks the vendors' sources once for the newest stable
+  hostile checkout is hardened against, and a finding against an adapter is a wrong answer, never a security finding.
+- **An adapter reaches no network while it reads a checkout or the person's settings.** What the build would fetch is
+  read from the person's local caches only; a value that sits in something not found there is named as unknown, with
+  where it is set, never guessed.
+- **The one online step is when `project.yml` is made:** an adapter asks the vendors' sources once for the newest stable
   version of what the project asks, visibly in the draft; offline or on a vendor's failure, the draft says unknown and
   names what was asked.
-- **A plugin only bootstraps.** Once `project.yml` exists, what stands in it is the person's, and a plugin does not read
-  it against anything.
+- **An adapter only bootstraps.** Once `project.yml` exists, what stands in it is the person's, and an adapter does not
+  read it against anything.
 - **A broken or huge file gets an answer, not a crash**: limits on size, XML without DTDs or fetching.
 - **Every value names its file and line, and where that stands**: the person's own files, the checkout, or the machine.
   A credential is named by its id only, and its value appears nowhere.
 - **Porelo's contract comes from Core**, in `porelo`'s `ecosystems/api`. Logic that does not need it, such as what a pom
   and the person's settings say about repository hosts, is built and tested without it.
-- **Under `GPL-3.0-or-later`, and nothing goes to Maven Central.** A plugin is a native executable in a package of its own, found at run time over the contract; nothing builds against an artifact here.
+- **Under `GPL-3.0-or-later`, and nothing goes to Maven Central.** An adapter is a native executable in a package of its own, found at run time over the contract; nothing builds against an artifact here.
 
 ## Work in this repository
 

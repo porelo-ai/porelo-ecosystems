@@ -18,7 +18,7 @@
     <version>0.1.0-SNAPSHOT</version>
     <packaging>pom</packaging>
     <name>Porelo Ecosystems</name>
-    <description>Build-tool plugins for Porelo: propose a project's tools and rules from its checkout, offline</description>
+    <description>Ecosystem adapters for Porelo: propose a project's tools and rules from its checkout, offline</description>
 
     <!-- Without the inherit.append.path attributes Maven appends each child's artifactId to these. -->
     <url>https://github.com/porelo-ai/porelo-ecosystems/</url>
@@ -63,7 +63,7 @@
     </dependencyManagement>
 
     <modules>
-        <module>plugins</module>
+        <module>adapters</module>
     </modules>
 
     <build>

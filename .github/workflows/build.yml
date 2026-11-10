@@ -1,5 +1,5 @@
-# Builds the plugins on every change to them: compiled, unit tests run, and the shared checks of the root's validate.
-# Nothing goes to Maven Central: a plugin is a native executable in a package of its own, found at run time over the
+# Builds the ecosystem adapters on every change: compiled, unit tests run, and the shared checks of the root's validate.
+# Nothing goes to Maven Central: an adapter is a native executable in a package of its own, found at run time over the
 # contract, and nothing builds against an artifact here. A push to main publishes its .deb and .rpm to the snapshots
 # channel, and a tag v<version> to the releases channel, where Porelo's own packages lie.
 # Against porelo-parent as a snapshot while it is one (-U takes the newest), as the shared rules allow.
@@ -116,8 +116,8 @@ jobs:
                       [ "$said" = "$expected" ] \
                           || { echo "::error::$2 answered '$said', not '$expected'"; exit 1; }
                   }
-                  deb="$(only plugins/maven/target/*.deb)"
-                  rpm="$(only plugins/maven/target/*.rpm)"
+                  deb="$(only adapters/maven/target/*.deb)"
+                  rpm="$(only adapters/maven/target/*.rpm)"
                   # The version the package carries, which check-package-version holds the .rpm to as well.
                   version="$(basename "$deb" _amd64.deb)"
                   version="${version#porelo-ecosystem-maven_}"
@@ -131,8 +131,8 @@ jobs:
               with:
                   name: packages
                   path: |
-                      plugins/maven/target/*.deb
-                      plugins/maven/target/*.rpm
+                      adapters/maven/target/*.deb
+                      adapters/maven/target/*.rpm
                   if-no-files-found: error
 
             - name: Not publishing
@@ -194,8 +194,8 @@ jobs:
                       [ "$#" = 1 ] && [ -f "$1" ] || { echo "::error::expected one package, matched: $*" >&2; exit 1; }
                       echo "$1"
                   }
-                  deb="$(only plugins/maven/target/*.deb)"
-                  rpm="$(only plugins/maven/target/*.rpm)"
+                  deb="$(only adapters/maven/target/*.deb)"
+                  rpm="$(only adapters/maven/target/*.rpm)"
                   # Asked of the store, not the index, which lags an upload. A published release is never replaced, and an
                   # answer other than there or not there stops the release.
                   absent() {
@@ -242,8 +242,8 @@ jobs:
               run: |
                   set -euo pipefail
                   base="${JF_URL%/}/artifactory"
-                  deb="$(basename plugins/maven/target/*.deb)"
-                  rpm="$(basename plugins/maven/target/*.rpm)"
+                  deb="$(basename adapters/maven/target/*.deb)"
+                  rpm="$(basename adapters/maven/target/*.rpm)"
                   indexed() {
                       local packages location primary
                       packages="$(curl -sSfL --retry 5 --retry-all-errors --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-deb/dists/${CHANNEL}/main/binary-amd64/Packages")" || return 1

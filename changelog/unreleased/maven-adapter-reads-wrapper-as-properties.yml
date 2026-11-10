@@ -1,0 +1,2 @@
+title: The Maven adapter reads the Maven wrapper's `maven-wrapper.properties` as a properties file, so a value written with spaces, a colon or over several lines still names the wrapper's Maven, its host and whether it needs `unzip`.
+type: fixed

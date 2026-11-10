@@ -1,0 +1,2 @@
+title: The Maven adapter answers Porelo's describe call with the version of the package it was built in, so a person can tell which build answered.
+type: added

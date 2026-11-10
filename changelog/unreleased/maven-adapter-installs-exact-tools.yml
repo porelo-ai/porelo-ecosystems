@@ -1,0 +1,2 @@
+title: When `project.yml` is made, the Maven adapter looks up the newest stable Temurin of the JDK a project asks, Maven in the pom's range and, for `native-maven-plugin`, GraalVM, and writes image lines that fetch each by URL and check its digest, with `JAVA_HOME`, `MAVEN_HOME` and `GRAALVM_HOME`; offline or on a vendor's failure, the distribution's package stays and the draft says what was asked.
+type: added

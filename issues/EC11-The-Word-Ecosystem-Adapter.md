@@ -1,6 +1,6 @@
 # EC11 — The Word Ecosystem Adapter
 
-**Status:** Implementing.
+**Status:** Review.
 **Size:** M - seven modules, the workflow and every text move; no behavior changes and no contract.
 
 **What must be true.** Whoever reads this repository, or what it ships, finds "ecosystem adapter", and "Maven adapter" for this one, and no longer "plugin" for what Porelo finds at run time, since that word reads as a Maven plugin. It holds before a first release fixes the word.
@@ -11,7 +11,7 @@ Read in today's tree, in the published package 0.1.0~snapshot.5 and in the contr
 
 1. **`plugins/` becomes `adapters/`,** with its submodules. `plugins/pom.xml`'s artifactId `porelo-ecosystems-plugins` becomes `porelo-ecosystems-adapters`, in that pom, in the six that name it as parent, and in the root's `<module>`; a grouping module is never published.
 2. **`.github/workflows/build.yml`:** its paths to `plugins/maven/target` move.
-3. **What a person reads:** the `README.md` of the root and of each module, the poms' descriptions, `AGENTS.md`'s own part, `doc/decisions.md`, the `.deb`'s control file and the `.rpm`'s description in `plugins/maven/pom.xml`, and both unreleased changelog sources.
+3. **What a person reads:** the `README.md` of the root and of each module, the poms' descriptions, `AGENTS.md`'s own part, `doc/decisions.md`, the `.deb`'s control file and the `.rpm`'s description in `plugins/maven/pom.xml`, and the unreleased changelog sources, their titles and file names.
 4. **Issues:** the titles, file names and text of the open issues, and the index.
 5. **Code comments and Javadoc** that call this program a plugin, such as those in `MavenEcosystem`.
 
@@ -32,6 +32,8 @@ No test goes red first: nothing can do harm that the packaging checks do not alr
 - The workflow's steps run green on a clean build under the new paths, and the two packages hold the same files at the same paths as before and answer `describe`.
 - `check-readmes`, `check-citations` and `check-shared` are green.
 
-## To be checked
+## Seen
 
-- Whether another repository links to `plugins/` here, or to the anchor `#a-plugin-has-nothing-to-secure` in `doc/decisions.md`, whose title changes with the word.
+- **The search:** every remaining "plugin" in tracked files was read and means Maven's own, a Gradle or Flutter plugin, or stands in the Shared Area or in this issue; in the open issues that is so in their texts about a pom's plugins, such as [EC13](README.md#ec13)'s corpus results and [EC14](README.md#ec14)'s toolchain plugins. The open issues whose title named this program carry the new word in their title and file name; the unreleased changelog sources carry it in their title and file name.
+- **The packages:** built with `-Pnative verify` from `main` and from this change, the `.deb` and the `.rpm` hold the same files at the same paths, differ only in the description's words, and both executables answer `describe` alike.
+- **Other repositories:** none links to `plugins/` here or to the anchor in `doc/decisions.md`, which is now `#an-adapter-has-nothing-to-secure`. Prose in `porelo`, `porelo-project` and `porelo-buildtools` still says the old word or the old path; that is theirs to change.
