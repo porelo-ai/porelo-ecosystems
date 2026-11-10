@@ -1,7 +1,20 @@
 # EC10 — The Reason An Adapter Has Nothing To Secure
 
-**Status:** Review.
-**Size:** XS - the wording of one rule and of the decision behind it; no code.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC10",
+  "title": "The Reason An Adapter Has Nothing To Secure",
+  "state": "Review",
+  "size": "XS",
+  "priority": "Medium",
+  "rank": 4,
+  "blockedBy": [],
+  "covers": "The rule that an adapter has nothing to secure says its real reason: the adapter runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control."
+}
+```
+
+**Why this size.** the wording of one rule and of the decision behind it; no code.
 
 **What must be true.** Whoever reads the rule that an adapter has nothing to secure finds the reason that holds when an adapter runs on a checkout just cloned, before the person has said anything: the adapter runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control.
 

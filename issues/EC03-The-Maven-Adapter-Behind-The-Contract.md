@@ -1,7 +1,20 @@
 # EC03 — The Maven Adapter Behind The Contract
 
-**Status:** Review.
-**Size:** M - one class behind the contract, a reader of what a task's image needs, the settings a task's Maven reads, the global settings and proxies, and the executable with its package.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC03",
+  "title": "The Maven Adapter Behind The Contract",
+  "state": "Review",
+  "size": "M",
+  "priority": "Medium",
+  "rank": 3,
+  "blockedBy": [],
+  "covers": "The Maven adapter as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs."
+}
+```
+
+**Why this size.** one class behind the contract, a reader of what a task's image needs, the settings a task's Maven reads, the global settings and proxies, and the executable with its package.
 
 **What must be true.** The Maven adapter is a native executable, in its own package, that Porelo finds at run time: it answers `Detect` over the `Ecosystem1` contract with the tools a checkout needs (the JDK, Maven, the system packages) and the rules (the repository hosts, memory, credential ids), every value with its file and line. `Configure` follows `porelo`'s broker. It is built on the plain model builder, registers the public methods of all Maven model types for reflection, since a pom's `${project.…}` reaches them, and turns a reflection `Error` into a refusal naming the file. It never reads a password: a server is named by its id, with whether it is known.
 

@@ -1,6 +1,18 @@
 # EC07 — The Flutter Adapter
 
-**Status:** Accepted.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC07",
+  "title": "The Flutter Adapter",
+  "state": "Accepted",
+  "size": "-",
+  "priority": "Medium",
+  "rank": 5,
+  "blockedBy": [],
+  "covers": "A checkout built with Flutter gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line."
+}
+```
 
 **What must be true.** A checkout built with Flutter gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. It reads `pubspec.yaml`'s `environment` and the platform directories.
 

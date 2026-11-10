@@ -1,7 +1,20 @@
 # EC18 — The Tests Follow The Test Pyramid
 
-**Status:** Accepted.
-**Size:** M - two fixes in the Maven module's tests, one S and one M; no contract and no main code changes.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC18",
+  "title": "The Tests Follow The Test Pyramid",
+  "state": "Accepted",
+  "size": "M",
+  "priority": "Medium",
+  "rank": 1,
+  "blockedBy": [],
+  "covers": "The tests follow the test pyramid: every merge case of poms and settings asserted in a unit test, the comparison with real Maven moved out of the unit stage so it runs in under a minute, and the install lines a tool gets in the image run in a test."
+}
+```
+
+**Why this size.** two fixes in the Maven module's tests, one S and one M; no contract and no main code changes.
 
 **What must be true.** Every flow of the Maven adapter is proven by unit tests over fakes, the module's unit suite runs in
 under a minute, and only what nothing lower can show runs as an integration test, in the native executable or in a real

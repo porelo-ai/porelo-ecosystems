@@ -1,7 +1,20 @@
 # EC12 — A Default Host Says It Is Maven's Own
 
-**Status:** Review.
-**Size:** XS - one note in one class; the contract does not change.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC12",
+  "title": "A Default Host Says It Is Maven's Own",
+  "state": "Review",
+  "size": "XS",
+  "priority": "Medium",
+  "rank": 7,
+  "blockedBy": [],
+  "covers": "A host that comes from no file, such as Maven's built-in Central, says in its note that it is Maven's built-in default."
+}
+```
+
+**Why this size.** one note in one class; the contract does not change.
 
 **What must be true.** A person who reads the Maven adapter's answer for a host that comes from no file, such as `repo.maven.apache.org` from Maven's built-in Central, reads that it is Maven's built-in default, not only `repository central at https://repo.maven.apache.org/maven2`.
 

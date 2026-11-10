@@ -1,7 +1,20 @@
 # EC11 — The Word Ecosystem Adapter
 
-**Status:** Review.
-**Size:** M - seven modules, the workflow and every text move; no behavior changes and no contract.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC11",
+  "title": "The Word Ecosystem Adapter",
+  "state": "Review",
+  "size": "M",
+  "priority": "Medium",
+  "rank": 11,
+  "blockedBy": [],
+  "covers": "\"Ecosystem adapter\" replaces \"plugin\" for what Porelo finds at run time, before a first release fixes the word: `plugins/` becomes `adapters/`, with every text a person reads; the package and installed paths stay."
+}
+```
+
+**Why this size.** seven modules, the workflow and every text move; no behavior changes and no contract.
 
 **What must be true.** Whoever reads this repository, or what it ships, finds "ecosystem adapter", and "Maven adapter" for this one, and no longer "plugin" for what Porelo finds at run time, since that word reads as a Maven plugin. It holds before a first release fixes the word.
 

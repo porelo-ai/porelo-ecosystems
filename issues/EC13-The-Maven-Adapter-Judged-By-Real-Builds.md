@@ -1,7 +1,20 @@
 # EC13 — The Maven Adapter Judged By Real Builds
 
-**Status:** Review.
-**Size:** L - a corpus of open source Maven projects built in real tasks, and a fix for each fault the Maven adapter shows there; how far it goes is read from the first projects.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC13",
+  "title": "The Maven Adapter Judged By Real Builds",
+  "state": "Review",
+  "size": "L",
+  "priority": "Medium",
+  "rank": 8,
+  "blockedBy": [],
+  "covers": "The Maven adapter judged by whether a real build runs in a real task, on a corpus of open source projects, with each fault fixed in the Java code alone."
+}
+```
+
+**Why this size.** a corpus of open source Maven projects built in real tasks, and a fix for each fault the Maven adapter shows there; how far it goes is read from the first projects.
 
 **What must be true.** For an open source Maven project, what the Maven adapter answers, written as a project file with no handwork, lets `mvn install` or `./mvnw install` run in a real task, unless the project cannot build outside it or the answer cannot be known offline.
 

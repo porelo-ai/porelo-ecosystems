@@ -1,7 +1,20 @@
 # EC01 — A Spike Of The Model Builder In A Native Image
 
-**Status:** Review.
-**Size:** S - one throwaway program and one page of what was measured; nothing of it stays but the answer.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC01",
+  "title": "A Spike Of The Model Builder In A Native Image",
+  "state": "Review",
+  "size": "S",
+  "priority": "Medium",
+  "rank": 1,
+  "blockedBy": [],
+  "covers": "Whether MIMA serves the Maven adapter as a native image, by measurement: it does, and the bare model builder is proposed instead."
+}
+```
+
+**Why this size.** one throwaway program and one page of what was measured; nothing of it stays but the answer.
 
 **What must be true.** It is known, by measurement, whether MIMA (`eu.maveniverse.maven.mima`) serves the Maven adapter as a native image: that its static runtime builds under GraalVM, how large the executable becomes, that its model API gives the effective model with parents, properties, profiles and imported BOMs merged as Maven merges them, that it refuses to fetch when offline, and that a value of the model can be traced to its file and line.
 

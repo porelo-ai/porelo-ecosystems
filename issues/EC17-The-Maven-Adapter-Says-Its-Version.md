@@ -1,7 +1,20 @@
 # EC17 — The Maven Adapter Says Its Version
 
-**Status:** Review
-**Size:** S - one module and its tests: the pom, one resource the native image must hold, `MavenEcosystem` and a test
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC17",
+  "title": "The Maven Adapter Says Its Version",
+  "state": "Review",
+  "size": "S",
+  "priority": "Medium",
+  "rank": 6,
+  "blockedBy": [],
+  "covers": "The Maven adapter answers with the version it was built as when Porelo asks it to describe itself, taken from its build, so a person can tell which build answered."
+}
+```
+
+**Why this size.** one module and its tests: the pom, one resource the native image must hold, `MavenEcosystem` and a test
 of the built executable; no contract of this repository changes.
 
 **What must be true.** When Porelo asks the Maven adapter to describe itself, the adapter answers with the version it was

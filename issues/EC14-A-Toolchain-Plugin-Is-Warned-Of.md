@@ -1,7 +1,20 @@
 # EC14 — A Toolchain Plugin Is Warned Of
 
-**Status:** Review.
-**Size:** S - one reader beside the one for container use, wired into `detect`, and its tests; the contract does not change.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC14",
+  "title": "A Toolchain Plugin Is Warned Of",
+  "state": "Review",
+  "size": "S",
+  "priority": "Medium",
+  "rank": 9,
+  "blockedBy": [],
+  "covers": "A plugin that picks or fetches its own JDK, `toolchains-maven-plugin` or Maven's own, gets a warning at its line naming the JDK it asks, instead of a build stopping on a refused host or a missing toolchain."
+}
+```
+
+**Why this size.** one reader beside the one for container use, wired into `detect`, and its tests; the contract does not change.
 
 **What must be true.** A person whose pom uses a plugin that picks or fetches its own JDK reads a warning at that plugin's line in the draft, naming the JDK it asks and what a task lacks for it, instead of meeting a build that stops on a refused host or a missing toolchain.
 

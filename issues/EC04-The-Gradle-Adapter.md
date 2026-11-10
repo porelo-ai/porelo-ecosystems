@@ -1,6 +1,18 @@
 # EC04 — The Gradle Adapter
 
-**Status:** Accepted.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC04",
+  "title": "The Gradle Adapter",
+  "state": "Accepted",
+  "size": "-",
+  "priority": "Medium",
+  "rank": 2,
+  "blockedBy": [],
+  "covers": "A checkout built with Gradle gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line."
+}
+```
 
 **What must be true.** A checkout built with Gradle gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. Gradle has no model without running its scripts, so it reads only files: the wrapper properties, the version catalog and toolchain declarations written as literals, and names more values unknown than Maven's.
 

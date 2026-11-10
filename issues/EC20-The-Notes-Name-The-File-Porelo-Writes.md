@@ -1,7 +1,20 @@
 # EC20 — The Notes Name The File Porelo Writes
 
-**Status:** Review.
-**Size:** XS - the wording of five notes and their tests; the contract does not change.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC20",
+  "title": "The Notes Name The File Porelo Writes",
+  "state": "Review",
+  "size": "XS",
+  "priority": "Medium",
+  "rank": 10,
+  "blockedBy": [],
+  "covers": "The notes that say what to write name `porelo.yml`, the file Porelo now writes, not `project.yml`."
+}
+```
+
+**Why this size.** the wording of five notes and their tests; the contract does not change.
 
 **What must be true.** Every note of the Maven adapter that tells a person what to write names the file Porelo writes into the checkout. Porelo 0.5.1 snapshot 454 writes `porelo.yml`; the notes still say `project.yml`.
 

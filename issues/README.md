@@ -4,6 +4,23 @@ The open tasks of `porelo-ecosystems`, grouped by state; the order within a grou
 issue, and who sets which state, are in [AGENTS.md](../AGENTS.md). Its prefix is `EC`. A group with nothing in it is left
 out.
 
+## Idea
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec15"></a>[EC15](EC15-What-The-Exact-Version-Step-Left-Unread.md) | - | - | What installing a project's tools in their exact version left unmeasured: a replaced `image.run`, the HTTP client's size, GraalVM's next asset names, Python's digests, and the online step's time. |
+| <a id="ec19"></a>[EC19](EC19-A-Central-Moved-By-A-Property-Names-Its-File.md) | - | - | A Central moved by the property `maven.repo.central` is answered with the file and line that set it, not as the machine's with no file. |
+
+## Accepted
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec18"></a>[EC18](EC18-The-Tests-Follow-The-Test-Pyramid.md) | M | - | The tests follow the test pyramid: every merge case of poms and settings asserted in a unit test, the comparison with real Maven moved out of the unit stage so it runs in under a minute, and the install lines a tool gets in the image run in a test. |
+| <a id="ec04"></a>[EC04](EC04-The-Gradle-Adapter.md) | - | - | A checkout built with Gradle gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
+| <a id="ec05"></a>[EC05](EC05-The-npm-Adapter.md) | - | - | A checkout built with npm gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
+| <a id="ec06"></a>[EC06](EC06-The-pip-Adapter.md) | - | - | A checkout built with pip gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
+| <a id="ec07"></a>[EC07](EC07-The-Flutter-Adapter.md) | - | - | A checkout built with Flutter gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
+
 ## Review
 
 | # | Size | Blocked by | What it covers |
@@ -19,23 +36,6 @@ out.
 | <a id="ec14"></a>[EC14](EC14-A-Toolchain-Plugin-Is-Warned-Of.md) | S | - | A plugin that picks or fetches its own JDK, `toolchains-maven-plugin` or Maven's own, gets a warning at its line naming the JDK it asks, instead of a build stopping on a refused host or a missing toolchain. |
 | <a id="ec20"></a>[EC20](EC20-The-Notes-Name-The-File-Porelo-Writes.md) | XS | - | The notes that say what to write name `porelo.yml`, the file Porelo now writes, not `project.yml`. |
 | <a id="ec11"></a>[EC11](EC11-The-Word-Ecosystem-Adapter.md) | M | - | "Ecosystem adapter" replaces "plugin" for what Porelo finds at run time, before a first release fixes the word: `plugins/` becomes `adapters/`, with every text a person reads; the package and installed paths stay. |
-
-## Accepted
-
-| # | Size | Blocked by | What it covers |
-|---|---|---|---|
-| <a id="ec18"></a>[EC18](EC18-The-Tests-Follow-The-Test-Pyramid.md) | M | - | The tests follow the test pyramid: every merge case of poms and settings asserted in a unit test, the comparison with real Maven moved out of the unit stage so it runs in under a minute, and the install lines a tool gets in the image run in a test. |
-| <a id="ec04"></a>[EC04](EC04-The-Gradle-Adapter.md) | - | - | A checkout built with Gradle gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
-| <a id="ec05"></a>[EC05](EC05-The-npm-Adapter.md) | - | - | A checkout built with npm gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
-| <a id="ec06"></a>[EC06](EC06-The-pip-Adapter.md) | - | - | A checkout built with pip gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
-| <a id="ec07"></a>[EC07](EC07-The-Flutter-Adapter.md) | - | - | A checkout built with Flutter gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
-
-## Idea
-
-| # | Size | Blocked by | What it covers |
-|---|---|---|---|
-| <a id="ec15"></a>[EC15](EC15-What-The-Exact-Version-Step-Left-Unread.md) | - | - | What installing a project's tools in their exact version left unmeasured: a replaced `image.run`, the HTTP client's size, GraalVM's next asset names, Python's digests, and the online step's time. |
-| <a id="ec19"></a>[EC19](EC19-A-Central-Moved-By-A-Property-Names-Its-File.md) | - | - | A Central moved by the property `maven.repo.central` is answered with the file and line that set it, not as the machine's with no file. |
 
 ## Finished
 

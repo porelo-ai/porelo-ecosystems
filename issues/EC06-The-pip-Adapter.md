@@ -1,6 +1,18 @@
 # EC06 — The pip Adapter
 
-**Status:** Accepted.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC06",
+  "title": "The pip Adapter",
+  "state": "Accepted",
+  "size": "-",
+  "priority": "Medium",
+  "rank": 4,
+  "blockedBy": [],
+  "covers": "A checkout built with pip gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line."
+}
+```
 
 **What must be true.** A checkout built with pip gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. It reads the requirements, the project file and the workflow's `setup-python`.
 

@@ -1,7 +1,20 @@
 # EC16 — A Project Behind An In-House Repository Manager Builds In A Task
 
-**Status:** Review.
-**Size:** M - four parts in the Maven module (the JDK stand-in, settings that do not parse, the forms of a credential,
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC16",
+  "title": "A Project Behind An In-House Repository Manager Builds In A Task",
+  "state": "Review",
+  "size": "M",
+  "priority": "Medium",
+  "rank": 5,
+  "blockedBy": [],
+  "covers": "A multi-module Maven project behind an in-house repository manager builds in a task: a JDK stands in when its parent went unread, a mirror that takes every repository reaches the task's settings, a credential is named in its form without its value, and settings that do not parse are warned of."
+}
+```
+
+**Why this size.** four parts in the Maven module (the JDK stand-in, settings that do not parse, the forms of a credential,
 a mirror that takes every repository) and one contract change, the mirror's reach `configure` is called with; about 90
 minutes, against a comparable issue of another repository estimated at 120 that took 43.
 

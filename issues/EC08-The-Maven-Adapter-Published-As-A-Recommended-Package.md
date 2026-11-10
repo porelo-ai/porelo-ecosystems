@@ -1,7 +1,20 @@
 # EC08 — The Maven Adapter Published As A Recommended Package
 
-**Status:** Review.
-**Size:** M - one package's metadata, a second format, and a publishing step in the workflow; Porelo's own package changes one line in each of its formats.
+```json
+{
+  "$schema": "issue-1.json",
+  "id": "EC08",
+  "title": "The Maven Adapter Published As A Recommended Package",
+  "state": "Review",
+  "size": "M",
+  "priority": "Medium",
+  "rank": 2,
+  "blockedBy": [],
+  "covers": "The Maven adapter published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed."
+}
+```
+
+**Why this size.** one package's metadata, a second format, and a publishing step in the workflow; Porelo's own package changes one line in each of its formats.
 
 **What must be true.** A person who installs Porelo from its package source gets the Maven adapter by default, in a package of its own, and can leave it out or remove it without touching Porelo. It is not part of the interface's package.
 
