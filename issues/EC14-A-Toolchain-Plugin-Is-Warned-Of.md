@@ -1,6 +1,6 @@
 # EC14 — A Toolchain Plugin Is Warned Of
 
-**Status:** Implementing.
+**Status:** Review.
 **Size:** S - one reader beside the one for container use, wired into `detect`, and its tests; the contract does not change.
 
 **What must be true.** A person whose pom uses a plugin that picks or fetches its own JDK reads a warning at that plugin's line in the draft, naming the JDK it asks and what a task lacks for it, instead of meeting a build that stops on a refused host or a missing toolchain.
@@ -30,8 +30,12 @@ Read in the plugins' own `plugin.xml`: the mvnsearch goal's `skip` reads the pro
 - `guava` at `592a1e6`, through the real first start, gets both warnings at `guava/pom.xml`'s plugin lines, naming JDK 27; seen in the corpus run's `first-start.json`.
 - Each test above is seen to fail with `ToolchainUse` taken out of `detect`.
 
-## To be checked
+## Seen
 
-- Whether `-Dskip=true` lets `guava` pass the mvnsearch goal in a task, and what else reads `skip` in that build; only then may a note name it.
-- `maven-toolchains-plugin`'s `select-jdk-toolchain` goal, which discovers JDKs on the machine: whether it finds the JDK under `/opt/java` and what it does when none matches.
-- Whether the line the warning names is the module's `<plugin>` or the managed configuration's, read with `Places` on `guava`.
+- **`guava` at `592a1e6`, through Porelo 0.5.1 snapshot 454's real first start** with this adapter's Java classes: both warnings stand at `guava/pom.xml` lines 56 and 60, the module's `<plugin>` lines, not the managed configuration's in the root pom, each naming JDK 27; the mvnsearch one also names `temurin` and its test JDK `${java.specification.version}` as not read here. `guava-gwt`, `guava-testlib` and `guava-tests` get the same two each.
+- **The tests** in `MavenEcosystemTest.AToolchainPlugin` failed before `ToolchainUse` was in `detect`, the four that expect a warning; the two that expect none held then too. The reading by another model found four faults, each with a test seen to fail first: a JDK named twice, or as none stated when `<jdk>` and `<testJdk>` stand in two executions; a vendor from a property not set taken as the vendor; another goal's configuration read; and Maven's note saying nothing helps, where a fetching plugin beside it writes the match.
+
+## Left unread
+
+- Whether `-Dskip=true` lets `guava` pass the mvnsearch goal in a task, and what else reads `skip` in that build; until then no note names it.
+- `maven-toolchains-plugin`'s `select-jdk-toolchain` goal, which discovers JDKs on the machine: whether it finds the JDK under `/opt/java` and what it does when none matches. It gets no warning yet.

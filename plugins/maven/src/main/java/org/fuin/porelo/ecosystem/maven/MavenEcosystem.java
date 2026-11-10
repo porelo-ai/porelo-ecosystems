@@ -90,6 +90,7 @@ public final class MavenEcosystem implements Ecosystem {
     public Detection detect(Path directory, Path home) {
         ToolNeeds needs = new ToolNeeds(directory.toAbsolutePath());
         ContainerUse containers = new ContainerUse();
+        ToolchainUse toolchains = new ToolchainUse();
         RepositoryHostsAnswer answer;
         try {
             answer =
@@ -99,6 +100,7 @@ public final class MavenEcosystem implements Ecosystem {
                             (model, places) -> {
                                 needs.read(model, places);
                                 containers.read(model, places);
+                                toolchains.read(model, places);
                             });
         } catch (NotAMavenCheckoutException e) {
             throw new EcosystemRefused(EcosystemRefused.Reason.NOT_RECOGNIZED, "");
@@ -112,7 +114,8 @@ public final class MavenEcosystem implements Ecosystem {
         answer.unknowns().forEach(unknown -> findings.add(ofUnknown(unknown)));
         return new Detection(
                 findings.stream().distinct().toList(),
-                Stream.concat(answer.unplaced().stream(), containers.unplaced().stream())
+                Stream.of(answer.unplaced(), containers.unplaced(), toolchains.unplaced())
+                        .flatMap(List::stream)
                         .map(MavenEcosystem::ofUnplaced)
                         .distinct()
                         .toList());

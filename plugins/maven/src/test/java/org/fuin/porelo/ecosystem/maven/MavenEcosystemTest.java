@@ -1097,6 +1097,272 @@ class MavenEcosystemTest {
         }
     }
 
+    /**
+     * Harm prevented: a draft reads as complete while the build stops at its first phase, on a
+     * refused host or a missing toolchain, for a JDK that a plugin picks or fetches of its own.
+     */
+    @Nested
+    class AToolchainPlugin {
+        private static final String FETCHING = "org.mvnsearch";
+        private static final String FETCHING_ARTIFACT = "toolchains-maven-plugin";
+        private static final String MAVENS = "maven-toolchains-plugin";
+
+        private static String toolchain(String jdk) {
+            return """
+                    <executions><execution>
+                      <goals><goal>toolchain</goal></goals>
+                      <configuration><toolchains>%s</toolchains></configuration>
+                    </execution></executions>
+                    """
+                    .formatted(jdk);
+        }
+
+        @Test
+        void aPluginThatFetchesItsJdkIsWarnedOfWithTheJdkAndTheHost() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    FETCHING,
+                                    FETCHING_ARTIFACT,
+                                    toolchain(
+                                            "<jdk><version>27</version><vendor>temurin</vendor></jdk>"
+                                                    + "<testJdk><version>25</version></testJdk>"))));
+
+            assertThat(detect().unplaced())
+                    .as("the person reads it before the build stops on a refused host")
+                    .singleElement()
+                    .satisfies(
+                            u -> {
+                                assertThat(u.file()).as("where it stands").isEqualTo("pom.xml");
+                                assertThat(u.line()).as("the plugin's line").isEqualTo(7);
+                                assertThat(u.note())
+                                        .as("the JDK it asks, for the build and its tests")
+                                        .contains(FETCHING_ARTIFACT)
+                                        .contains("JDK 27 (temurin)")
+                                        .contains("JDK 25 for its tests")
+                                        .as("where it fetches it from, and that none is opened")
+                                        .contains("api.foojay.io")
+                                        .contains("no host is opened for it")
+                                        .contains("toolchains.xml");
+                            });
+        }
+
+        @Test
+        void mavensToolchainPluginIsWarnedOfWithTheJdkItsManagementAsks() throws IOException {
+            String managed =
+                    """
+                    <build>
+                      <pluginManagement><plugins><plugin>
+                        <artifactId>maven-toolchains-plugin</artifactId>
+                        %s
+                      </plugin></plugins></pluginManagement>
+                      <plugins><plugin>
+                        <artifactId>maven-toolchains-plugin</artifactId>
+                      </plugin></plugins>
+                    </build>
+                    """
+                            .formatted(toolchain("<jdk><version>27</version></jdk>"));
+            f.pom("pom.xml", project("child", managed));
+
+            assertThat(detect().unplaced())
+                    .as("the build stops where no toolchains.xml holds that JDK")
+                    .singleElement()
+                    .satisfies(
+                            u -> {
+                                assertThat(u.line())
+                                        .as(
+                                                "the line of the plugin the build runs, not its management")
+                                        .isEqualTo(16);
+                                assertThat(u.note())
+                                        .contains(MAVENS)
+                                        .contains("JDK 27")
+                                        .contains("toolchains.xml")
+                                        .contains("a task does not have")
+                                        .doesNotContain("api.foojay.io");
+                            });
+        }
+
+        @Test
+        void aToolchainPluginOnlyManagedIsNotWarnedOf() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                            <build><pluginManagement><plugins><plugin>
+                              <artifactId>maven-toolchains-plugin</artifactId>
+                              %s
+                            </plugin></plugins></pluginManagement></build>
+                            """
+                                    .formatted(toolchain("<jdk><version>27</version></jdk>"))));
+
+            assertThat(detect().unplaced()).as("no build runs it").isEmpty();
+        }
+
+        @Test
+        void aToolchainPluginWithNoToolchainGoalIsNotWarnedOf() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    FETCHING,
+                                    FETCHING_ARTIFACT,
+                                    "<configuration><toolchains><jdk><version>27</version></jdk>"
+                                            + "</toolchains></configuration>")));
+
+            assertThat(detect().unplaced()).as("no goal of it runs").isEmpty();
+        }
+
+        @Test
+        void aJdkWhoseVersionIsNotReadIsNamedAsSuch() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.apache.maven.plugins",
+                                    MAVENS,
+                                    toolchain("<jdk><version>${jdk.unset}</version></jdk>"))));
+
+            assertThat(detect().unplaced())
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("a JDK the reader cannot read is not guessed")
+                                            .contains("a JDK whose version is not read here")
+                                            .contains("${jdk.unset}"));
+        }
+
+        @Test
+        void aJdkTwoExecutionsAskIsNamedOnceAndAnotherGoalsIsNot() throws IOException {
+            String executions =
+                    """
+                    <executions>
+                      <execution><id>a</id><goals><goal>toolchain</goal></goals>
+                        <configuration><toolchains><jdk><version>27</version></jdk></toolchains></configuration>
+                      </execution>
+                      <execution><id>b</id><goals><goal>toolchain</goal></goals>
+                        <configuration><toolchains><jdk><version>27</version></jdk></toolchains></configuration>
+                      </execution>
+                      <execution><id>c</id><goals><goal>select-jdk-toolchain</goal></goals>
+                        <configuration><toolchains><jdk><version>11</version></jdk></toolchains></configuration>
+                      </execution>
+                    </executions>
+                    """;
+            f.pom(
+                    "pom.xml",
+                    project("child", plugin("org.apache.maven.plugins", MAVENS, executions)));
+
+            assertThat(detect().unplaced())
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("the JDK the toolchain goal asks, once")
+                                            .containsOnlyOnce("JDK 27")
+                                            .as("not what another goal is configured with")
+                                            .doesNotContain("11"));
+        }
+
+        @Test
+        void aTestJdkStatedApartAddsNoJdkNoneStates() throws IOException {
+            String executions =
+                    """
+                    <executions>
+                      <execution><id>a</id><goals><goal>toolchain</goal></goals>
+                        <configuration><toolchains><jdk><version>27</version></jdk></toolchains></configuration>
+                      </execution>
+                      <execution><id>b</id><goals><goal>toolchain</goal></goals>
+                        <configuration><toolchains><testJdk><version>25</version></testJdk></toolchains></configuration>
+                      </execution>
+                    </executions>
+                    """;
+            f.pom("pom.xml", project("child", plugin(FETCHING, FETCHING_ARTIFACT, executions)));
+
+            assertThat(detect().unplaced())
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .contains("JDK 27")
+                                            .contains("JDK 25 for its tests")
+                                            .doesNotContain("none stated"));
+        }
+
+        @Test
+        void aVendorFromAPropertyIsNamedAndOneNotReadIsNotGuessed() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            properties("jdk.vendor", "zulu")
+                                    + plugin(
+                                            FETCHING,
+                                            FETCHING_ARTIFACT,
+                                            toolchain(
+                                                    "<jdk><version>27</version><vendor>${jdk.vendor}</vendor></jdk>"
+                                                            + "<testJdk><version>25</version><vendor>${jdk.unset}</vendor></testJdk>"))));
+
+            assertThat(detect().unplaced())
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("a property the pom sets is read")
+                                            .contains("JDK 27 (zulu)")
+                                            .as("one it does not set is named as not read")
+                                            .contains(
+                                                    "JDK 25 (a vendor not read here, ${jdk.unset}) for its tests"));
+        }
+
+        @Test
+        void mavensToolchainPluginLeavesOpenThatAnotherPluginWritesTheToolchain()
+                throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.apache.maven.plugins",
+                                    MAVENS,
+                                    toolchain("<jdk><version>27</version></jdk>"))));
+
+            assertThat(detect().unplaced())
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("a fetching plugin beside it can write the match")
+                                            .contains("unless another plugin writes one")
+                                            .doesNotContain("nothing in project.yml changes that"));
+        }
+
+        @Test
+        void eachModuleThatRunsItIsWarnedOfOnce() throws IOException {
+            String uses =
+                    plugin(
+                            "org.apache.maven.plugins",
+                            MAVENS,
+                            toolchain("<jdk><version>27</version></jdk>"));
+            f.pom(
+                            "pom.xml",
+                            project(
+                                    "child",
+                                    "<modules><module>a</module><module>b</module></modules>"))
+                    .pom("a/pom.xml", project("a", uses))
+                    .pom("b/pom.xml", project("b", uses));
+
+            assertThat(detect().unplaced())
+                    .as("one warning per pom that runs it")
+                    .extracting(u -> u.file())
+                    .containsExactlyInAnyOrder("a/pom.xml", "b/pom.xml");
+        }
+    }
+
     /** Harm prevented: a build runs out of memory in a box sized without asking it. */
     @Nested
     class Memory {

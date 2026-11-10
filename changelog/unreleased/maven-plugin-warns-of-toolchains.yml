@@ -1,0 +1,2 @@
+title: A pom whose build runs a toolchain plugin, `toolchains-maven-plugin` or Maven's own, gets a warning at that plugin's line naming the JDK it asks and what a task lacks for it.
+type: added
