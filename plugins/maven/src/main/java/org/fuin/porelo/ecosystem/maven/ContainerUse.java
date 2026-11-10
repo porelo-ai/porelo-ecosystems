@@ -31,7 +31,7 @@ final class ContainerUse {
                         places.of(dependency.getLocation("")),
                         "this build uses Testcontainers, whose tests start containers, which a task"
                                 + " does not support in any security class, so those tests fail or"
-                                + " skip themselves; nothing in project.yml changes that;"
+                                + " skip themselves; nothing in porelo.yml changes that;"
                                 + " -DskipTests in the build's command leaves them out");
             }
         }
@@ -43,7 +43,7 @@ final class ContainerUse {
                             plugin.getArtifactId()
                                     + " starts containers or needs their daemon, which a task does"
                                     + " not support in any security class, so its goals fail where"
-                                    + " the build runs them; nothing in project.yml changes that;"
+                                    + " the build runs them; nothing in porelo.yml changes that;"
                                     + " what remains is a build command that leaves those goals"
                                     + " out");
                 }

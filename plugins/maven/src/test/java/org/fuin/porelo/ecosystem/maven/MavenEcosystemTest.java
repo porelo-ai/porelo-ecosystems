@@ -948,7 +948,7 @@ class MavenEcosystemTest {
                                         .contains("a task does not support")
                                         .contains("-DskipTests")
                                         .contains("skip themselves")
-                                        .contains("nothing in project.yml changes that")
+                                        .contains("nothing in porelo.yml changes that")
                                         .contains("any security class")
                                         .doesNotContain("-DskipITs");
                             });
@@ -974,7 +974,7 @@ class MavenEcosystemTest {
                                 assertThat(u.note())
                                         .as("it names what fails")
                                         .contains(artifact)
-                                        .contains("nothing in project.yml changes that")
+                                        .contains("nothing in porelo.yml changes that")
                                         .contains("any security class")
                                         .contains("leaves those goals out")
                                         .contains("a task does not support");
@@ -1144,6 +1144,7 @@ class MavenEcosystemTest {
                                         .contains("JDK 25 for its tests")
                                         .as("where it fetches it from, and that none is opened")
                                         .contains("api.foojay.io")
+                                        .contains("in porelo.yml under egress")
                                         .contains("no host is opened for it")
                                         .contains("toolchains.xml");
                             });
@@ -1338,7 +1339,7 @@ class MavenEcosystemTest {
                                     assertThat(u.note())
                                             .as("a fetching plugin beside it can write the match")
                                             .contains("unless another plugin writes one")
-                                            .doesNotContain("nothing in project.yml changes that"));
+                                            .doesNotContain("nothing in porelo.yml changes that"));
         }
 
         @Test
@@ -1700,7 +1701,10 @@ class MavenEcosystemTest {
                                             .contains("egress.domains")
                                             .contains("domains: [\"repo.example.org\"]")
                                             .contains("image.run")
-                                            .contains("RUN apt-get update"));
+                                            .contains("RUN apt-get update")
+                                            .as("in the file Porelo writes")
+                                            .contains("add it in porelo.yml")
+                                            .doesNotContain("project.yml"));
         }
 
         /** Harm prevented: a build stops on a host its plugin names in plain sight. */
@@ -1951,7 +1955,9 @@ class MavenEcosystemTest {
                                     assertThat(u.note())
                                             .as("the host's key, and the tool's")
                                             .contains("egress.domains")
-                                            .contains("image.run"));
+                                            .contains("image.run")
+                                            .as("in the file Porelo writes")
+                                            .contains("add it in porelo.yml"));
         }
 
         /** Harm prevented: a person trusts a path that does not exist in the task. */
@@ -1986,7 +1992,7 @@ class MavenEcosystemTest {
                             u ->
                                     assertThat(u.note())
                                             .as("nothing to write")
-                                            .contains("nothing in project.yml changes that")
+                                            .contains("nothing in porelo.yml changes that")
                                             .doesNotContain("egress.domains"));
         }
 
@@ -2000,7 +2006,12 @@ class MavenEcosystemTest {
                     .as("what stands in it is not read")
                     .filteredOn(u -> u.file().equals(".mvn/wrapper/maven-wrapper.properties"))
                     .singleElement()
-                    .satisfies(u -> assertThat(u.note()).contains("egress.domains"));
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .contains("egress.domains")
+                                            .as("in the file Porelo writes")
+                                            .contains("add it in porelo.yml"));
         }
 
         /** Harm prevented: what a file too large to read asks is unknown, and unsaid how to add. */
@@ -2017,7 +2028,9 @@ class MavenEcosystemTest {
                                     assertThat(u.note())
                                             .as("the host's key")
                                             .contains("too large")
-                                            .contains("egress.domains"));
+                                            .contains("egress.domains")
+                                            .as("in the file Porelo writes")
+                                            .contains("add it in porelo.yml"));
         }
 
         @Test

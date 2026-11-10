@@ -123,7 +123,7 @@ final class MavenOptions {
             notes.add(
                     note(
                             "this file cannot be read, and the build stops on it too; nothing in"
-                                    + " project.yml changes that",
+                                    + " porelo.yml changes that",
                             name,
                             0));
             return List.of();

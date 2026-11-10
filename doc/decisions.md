@@ -64,7 +64,7 @@ What stays out of the answer, each named here because no fixture shows it:
 
 ## A project's tools are fetched by URL and digest
 
-A distribution's packages decide a tool's version, and a pom asking Maven 3.9 then meets 3.8.7. So what a project asks is installed in the exact version, found once when `project.yml` is made and written there as ordinary `image.run` lines and `image.env` values, which are the person's from then on.
+A distribution's packages decide a tool's version, and a pom asking Maven 3.9 then meets 3.8.7. So what a project asks is installed in the exact version, found once when `porelo.yml` is made and written there as ordinary `image.run` lines and `image.env` values, which are the person's from then on.
 
 - **No tool manager.** SDKMAN's installer fetches its own code with no digest, and its service sends no checksum for Temurin, GraalVM, Maven or Gradle, so their archives go unchecked; it also adds a host and a mapping of its own, and holds no Node, Python or Flutter. Every vendor names a digest beside its archive, and one small `RUN` that fetches, checks and unpacks serves every tool.
 - **The vendors' own lists answer the version.** Foojay's service was weighed as one source for all JDKs; on the day a release appeared it still answered the one before. GraalVM's major is read from an asset's name, since its tags no longer carry it.

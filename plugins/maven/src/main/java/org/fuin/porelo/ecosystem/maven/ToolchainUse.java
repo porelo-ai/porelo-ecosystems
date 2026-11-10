@@ -29,7 +29,7 @@ final class ToolchainUse {
                     " fetches %s from api.foojay.io and the vendor's download host when the"
                             + " toolchains.xml holds no match, which a task's does not; no host"
                             + " is opened for it, as nothing offline names the download host; to"
-                            + " let it fetch, add api.foojay.io and that host in project.yml under"
+                            + " let it fetch, add api.foojay.io and that host in porelo.yml under"
                             + " egress yourself",
                     MAVENS,
                     " needs %s in a toolchains.xml, which a task does not have unless another"
