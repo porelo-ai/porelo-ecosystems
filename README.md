@@ -16,7 +16,7 @@ must reach. Every value names the file and line it came from; what it cannot pla
 ./mvnw -B -s settings.xml verify
 ```
 
-JDK 25. See [AGENTS.md](AGENTS.md) for the conventions.
+JDK 25. See [AGENTS.md](AGENTS.md) for the conventions, and [Contributing](CONTRIBUTING.md).
 
 ## License
 
