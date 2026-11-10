@@ -19,7 +19,7 @@ out.
 | <a id="ec14"></a>[EC14](EC14-A-Toolchain-Plugin-Is-Warned-Of.md) | S | - | A plugin that picks or fetches its own JDK, `toolchains-maven-plugin` or Maven's own, gets a warning at its line naming the JDK it asks, instead of a build stopping on a refused host or a missing toolchain. |
 | <a id="ec20"></a>[EC20](EC20-The-Notes-Name-The-File-Porelo-Writes.md) | XS | - | The notes that say what to write name `porelo.yml`, the file Porelo now writes, not `project.yml`. |
 
-## Backlog
+## Implementing
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|

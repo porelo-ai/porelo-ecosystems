@@ -1,6 +1,6 @@
 # EC11 — The Word Ecosystem Adapter
 
-**Status:** Backlog.
+**Status:** Implementing.
 **Size:** M - seven modules, the workflow and every text move; no behavior changes and no contract.
 
 **What must be true.** Whoever reads this repository, or what it ships, finds "ecosystem adapter", and "Maven adapter" for this one, and no longer "plugin" for what Porelo finds at run time, since that word reads as a Maven plugin. It holds before a first release fixes the word.
