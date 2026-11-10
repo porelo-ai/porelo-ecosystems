@@ -1,0 +1,2 @@
+title: The Maven adapter's .deb and .rpm ship `THIRD-PARTY-NOTICES`, the full license and notice texts of every library compiled into its executable and of the GraalVM runtime, written by the shared generator from the runtime classpath and the build's CycloneDX bill; the deb's copyright file names each library with its license, and the rpm marks the file as a license and names every license in its tag.
+type: added

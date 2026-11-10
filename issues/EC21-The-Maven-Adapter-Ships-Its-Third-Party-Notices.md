@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC21",
   "title": "The Maven Adapter Ships Its Third-Party Notices",
-  "state": "Implementing",
+  "state": "Review",
   "size": "S",
   "priority": "Medium",
   "rank": 3,
@@ -54,10 +54,35 @@ The file is to come from one generator shared by Porelo's packages: given a runt
 `THIRD-PARTY-NOTICES` with each library's name, version and license, and the full text of every license and notice
 the jars carry or name, embedded ones among them.
 
-## To be checked
+## Plan
 
-- Which of the runtime classpath's classes the native image keeps: a library with no class kept may still be listed.
-- The license and notice texts the GraalVM runtime asks of a native executable, as the GraalVM release used here
-  ships them.
-- Whether the deb ships the texts under `/usr/share/doc/porelo-ecosystem-maven/` beside its copyright file, and the
-  rpm `THIRD-PARTY-NOTICES` as `%license` with a `license` tag naming every license in it.
+- **The runtime classpath, written in every build**: `dependency:build-classpath` with the runtime scope writes
+  `target/classpath.txt` before the tests, for the test below and for the generator.
+- **The notices, in the native build at `prepare-package`, before the image**: the CycloneDX plugin writes
+  `target/bom.json` (the module is not deployed, so `skipNotDeployed` is off), then `porelo-release
+  third-party-notices` writes `target/THIRD-PARTY-NOTICES` from the classpath, the bill and the JDK the image is built
+  with, so a refusal costs no image. The bill needs Maven online: a clean offline build has none, and the generator
+  refuses, so no package is made without the file; a bill left from an earlier build is held to every jar's hash.
+- **The deb** ships it as `/usr/share/doc/porelo-ecosystem-maven/THIRD-PARTY-NOTICES`; its copyright file names each
+  library with its license, says where the full texts are, and gives a `License` paragraph for every license named.
+- **The rpm** ships it as `/usr/share/licenses/porelo-ecosystem-maven/THIRD-PARTY-NOTICES`, marked `%license`, and
+  its `license` tag names `GPL-3.0-or-later AND Apache-2.0 AND EPL-2.0 AND BSD-3-Clause AND MIT AND BSD-2-Clause AND
+  xpp AND GPL-2.0-only WITH Classpath-exception-2.0`: the program's, the libraries', what plexus-utils embeds, and
+  the runtime's.
+- **Tests, each seen red first**: `CopyrightTest` holds the copyright file to the runtime classpath: every jar on it
+  is named, read from its file name whatever its version carries, the file says where the full texts are, and the
+  executable's licenses stand on one `License` line, which a parser reads whole.
+
+## Acceptance
+
+- The native build writes the file with no refusal: 14 jars and the runtime.
+- `dpkg-deb -c` lists the file beside the copyright file; `rpm -qpL` lists it with the two licenses before; `rpm -qp
+  --qf '%{LICENSE}'` gives the tag above.
+- `CopyrightTest` fails for a jar on the classpath that the copyright file does not name.
+
+Measured on a local native build:
+
+- **Classes kept:** the executable holds class names of every library but `asm` and `jspecify` (annotations only);
+  both stay listed, as the generator lists every jar of the classpath, never less than the image needs.
+- **The runtime's texts:** the GraalVM release's `LICENSE.txt`, `LICENSE_NATIVEIMAGE.txt`, `THIRD_PARTY_LICENSE.txt`
+  and its whole `legal/` directory stand in the file's last section.

@@ -21,12 +21,6 @@ out.
 | <a id="ec06"></a>[EC06](EC06-The-pip-Adapter.md) | - | - | A checkout built with pip gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 | <a id="ec07"></a>[EC07](EC07-The-Flutter-Adapter.md) | - | - | A checkout built with Flutter gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 
-## Implementing
-
-| # | Size | Blocked by | What it covers |
-|---|---|---|---|
-| <a id="ec21"></a>[EC21](EC21-The-Maven-Adapter-Ships-Its-Third-Party-Notices.md) | S | - | The Maven adapter's packages carry the full license and notice texts of every library compiled into its native executable, from the shared generator, named in the deb's copyright file and marked as a license in the rpm. |
-
 ## Review
 
 | # | Size | Blocked by | What it covers |
@@ -34,6 +28,7 @@ out.
 | <a id="ec01"></a>[EC01](EC01-A-Spike-Of-The-Model-Builder-In-A-Native-Image.md) | S | - | Whether MIMA serves the Maven adapter as a native image, by measurement: it does, and the bare model builder is proposed instead. |
 | <a id="ec08"></a>[EC08](EC08-The-Maven-Adapter-Published-As-A-Recommended-Package.md) | M | - | The Maven adapter published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
 | <a id="ec03"></a>[EC03](EC03-The-Maven-Adapter-Behind-The-Contract.md) | M | - | The Maven adapter as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs. |
+| <a id="ec21"></a>[EC21](EC21-The-Maven-Adapter-Ships-Its-Third-Party-Notices.md) | S | - | The Maven adapter's packages carry the full license and notice texts of every library compiled into its native executable, from the shared generator, named in the deb's copyright file and marked as a license in the rpm. |
 | <a id="ec10"></a>[EC10](EC10-The-Reason-An-Adapter-Has-Nothing-To-Secure.md) | XS | - | The rule that an adapter has nothing to secure says its real reason: the adapter runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control. |
 | <a id="ec16"></a>[EC16](EC16-A-Project-Behind-An-In-House-Repository-Manager-Builds-In-A-Task.md) | M | - | A multi-module Maven project behind an in-house repository manager builds in a task: a JDK stands in when its parent went unread, a mirror that takes every repository reaches the task's settings, a credential is named in its form without its value, and settings that do not parse are warned of. |
 | <a id="ec17"></a>[EC17](EC17-The-Maven-Adapter-Says-Its-Version.md) | S | - | The Maven adapter answers with the version it was built as when Porelo asks it to describe itself, taken from its build, so a person can tell which build answered. |

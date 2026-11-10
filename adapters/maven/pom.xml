@@ -81,8 +81,28 @@
                         <test.maven.repository>${settings.localRepository}</test.maven.repository>
                         <test.maven.help.version>${maven-help-plugin.version}</test.maven.help.version>
                         <test.package.version>${package.version}</test.package.version>
+                        <test.runtime.classpath>${project.build.directory}/classpath.txt</test.runtime.classpath>
                     </systemPropertyVariables>
                 </configuration>
+            </plugin>
+            <!-- What the executable compiles in, one jar a line: a test holds the copyright file to it, and the
+                 native build writes the third-party notices from it. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>runtime-classpath</id>
+                        <phase>generate-test-resources</phase>
+                        <goals>
+                            <goal>build-classpath</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <outputFile>${project.build.directory}/classpath.txt</outputFile>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
             <!-- The package's version, <version>~snapshot.<run> for a snapshot: the adapter says it, and the package carries it. -->
             <plugin>
@@ -157,6 +177,27 @@
                             </execution>
                         </executions>
                     </plugin>
+                    <!-- The bill the notices are checked against: each jar by its hash, with the licenses its POM names. -->
+                    <plugin>
+                        <groupId>org.cyclonedx</groupId>
+                        <artifactId>cyclonedx-maven-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>bill</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>makeBom</goal>
+                                </goals>
+                                <configuration>
+                                    <outputFormat>json</outputFormat>
+                                    <outputName>bom</outputName>
+                                    <!-- The module is not deployed: its packages are, and they need the bill. -->
+                                    <skipNotDeployed>false</skipNotDeployed>
+                                    <includeTestScope>false</includeTestScope>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
                     <plugin>
                         <groupId>org.vafer</groupId>
                         <artifactId>jdeb</artifactId>
@@ -181,6 +222,18 @@
                                                 <type>perm</type>
                                                 <prefix>/usr/libexec/porelo/ecosystems</prefix>
                                                 <filemode>755</filemode>
+                                                <user>root</user>
+                                                <group>root</group>
+                                            </mapper>
+                                        </data>
+                                        <!-- The full texts of what the executable compiles in, which the copyright file names. -->
+                                        <data>
+                                            <src>${project.build.directory}/THIRD-PARTY-NOTICES</src>
+                                            <type>file</type>
+                                            <mapper>
+                                                <type>perm</type>
+                                                <prefix>/usr/share/doc/${project.artifactId}</prefix>
+                                                <filemode>644</filemode>
                                                 <user>root</user>
                                                 <group>root</group>
                                             </mapper>
@@ -226,7 +279,8 @@
                             <description>Installs one program under /usr/libexec/porelo/ecosystems, where the porelo binary finds its ecosystem adapters. It reads a checkout's poms and the person's Maven settings, runs no project code and opens no connection.</description>
                             <architecture>x86_64</architecture>
                             <group>Applications/System</group>
-                            <license>GPL-3.0-or-later AND Apache-2.0</license>
+                            <!-- The program's, and those of what it compiles in, as THIRD-PARTY-NOTICES gives them. -->
+                            <license>GPL-3.0-or-later AND Apache-2.0 AND EPL-2.0 AND BSD-3-Clause AND MIT AND BSD-2-Clause AND xpp AND GPL-2.0-only WITH Classpath-exception-2.0</license>
                             <packager>Michael Schnell &lt;michael@fuin.org&gt;</packager>
                             <requires>
                                 <require>porelo</require>
@@ -262,15 +316,43 @@
                                     <group>root</group>
                                     <license>true</license>
                                 </entry>
+                                <entry>
+                                    <name>/usr/share/licenses/${project.artifactId}/THIRD-PARTY-NOTICES</name>
+                                    <file>${project.build.directory}/THIRD-PARTY-NOTICES</file>
+                                    <mode>0644</mode>
+                                    <user>root</user>
+                                    <group>root</group>
+                                    <license>true</license>
+                                </entry>
                             </entries>
                         </configuration>
                     </plugin>
-                    <!-- After both packages, as all bind to verify and run in this order: the executable against what
-                         the packages declare, then what the packages say their version is. -->
+                    <!-- The notices before the image, at prepare-package, so a refusal costs no image; then, after both
+                         packages, as all bind to verify and run in this order: the executable against what the packages
+                         declare, then what the packages say their version is. -->
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
                         <artifactId>exec-maven-plugin</artifactId>
                         <executions>
+                            <!-- Before both packages, which ship it: the license and notice texts of every jar the
+                                 executable compiles in, and of the runtime, from the shared generator. -->
+                            <execution>
+                                <id>third-party-notices</id>
+                                <phase>prepare-package</phase>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <configuration>
+                                    <executable>${java.home}/bin/java</executable>
+                                    <includeProjectDependencies>false</includeProjectDependencies>
+                                    <includePluginDependencies>true</includePluginDependencies>
+                                    <executableDependency>
+                                        <groupId>org.fuin.porelo</groupId>
+                                        <artifactId>porelo-release</artifactId>
+                                    </executableDependency>
+                                    <commandlineArgs>-classpath %classpath org.fuin.porelo.release.Main third-party-notices ${project.build.directory}/classpath.txt ${project.build.directory}/bom.json ${java.home} ${project.build.directory}/THIRD-PARTY-NOTICES</commandlineArgs>
+                                </configuration>
+                            </execution>
                             <execution>
                                 <id>check-linkage</id>
                                 <phase>verify</phase>
