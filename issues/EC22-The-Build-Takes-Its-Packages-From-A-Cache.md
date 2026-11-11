@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC22",
   "title": "The Build Takes Its Packages From A Cache",
-  "state": "Analyzed",
+  "state": "Implementing",
   "size": "S",
   "priority": "Medium",
   "rank": 1,

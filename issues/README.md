@@ -11,11 +11,11 @@ out.
 | <a id="ec15"></a>[EC15](EC15-What-The-Exact-Version-Step-Left-Unread.md) | - | - | What installing a project's tools in their exact version left unmeasured: a replaced `image.run`, the HTTP client's size, GraalVM's next asset names, Python's digests, and the online step's time. |
 | <a id="ec19"></a>[EC19](EC19-A-Central-Moved-By-A-Property-Names-Its-File.md) | - | - | A Central moved by the property `maven.repo.central` is answered with the file and line that set it, not as the machine's with no file. |
 
-## Analyzed
+## Implementing
 
-| # | Size | Blocked by | Open questions | What it covers |
-|---|---|---|---|---|
-| <a id="ec22"></a>[EC22](EC22-The-Build-Takes-Its-Packages-From-A-Cache.md) | S | - | 0 | The Build takes the Ubuntu packages that read the built packages from a cache keyed by their versions, and every cache of the workflows keeps only its newest entry. |
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec22"></a>[EC22](EC22-The-Build-Takes-Its-Packages-From-A-Cache.md) | S | - | The Build takes the Ubuntu packages that read the built packages from a cache keyed by their versions, and every cache of the workflows keeps only its newest entry. |
 
 ## Accepted
 
