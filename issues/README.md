@@ -11,12 +11,6 @@ out.
 | <a id="ec15"></a>[EC15](EC15-What-The-Exact-Version-Step-Left-Unread.md) | - | - | What installing a project's tools in their exact version left unmeasured: a replaced `image.run`, the HTTP client's size, GraalVM's next asset names, Python's digests, and the online step's time. |
 | <a id="ec19"></a>[EC19](EC19-A-Central-Moved-By-A-Property-Names-Its-File.md) | - | - | A Central moved by the property `maven.repo.central` is answered with the file and line that set it, not as the machine's with no file. |
 
-## Implementing
-
-| # | Size | Blocked by | What it covers |
-|---|---|---|---|
-| <a id="ec22"></a>[EC22](EC22-The-Build-Takes-Its-Packages-From-A-Cache.md) | S | - | The Build takes the Ubuntu packages that read the built packages from a cache keyed by their versions, and every cache of the workflows keeps only its newest entry. |
-
 ## Accepted
 
 | # | Size | Blocked by | What it covers |
@@ -31,6 +25,7 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
+| <a id="ec22"></a>[EC22](EC22-The-Build-Takes-Its-Packages-From-A-Cache.md) | S | - | The Build takes the Ubuntu packages that read the built packages from a cache keyed by their pinned versions, and every cache of the workflows is dropped by GitHub once no run has read it for seven days. |
 | <a id="ec01"></a>[EC01](EC01-A-Spike-Of-The-Model-Builder-In-A-Native-Image.md) | S | - | Whether MIMA serves the Maven adapter as a native image, by measurement: it does, and the bare model builder is proposed instead. |
 | <a id="ec08"></a>[EC08](EC08-The-Maven-Adapter-Published-As-A-Recommended-Package.md) | M | - | The Maven adapter published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
 | <a id="ec03"></a>[EC03](EC03-The-Maven-Adapter-Behind-The-Contract.md) | M | - | The Maven adapter as a native executable in its own package, answering Porelo over its contract with the tools and rules a checkout needs. |

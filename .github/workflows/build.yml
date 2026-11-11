@@ -44,9 +44,58 @@ jobs:
               uses: ./.github/actions/pinned-jdk
 
             # check-package-version reads the built .rpm with rpm, which the runner is not promised to have, and the
-            # packages are unpacked below with rpm2cpio and cpio.
+            # packages are unpacked below with rpm2cpio and cpio. Pinned and cached by those pins, so a Build that had
+            # them once asks no Ubuntu mirror again; GitHub drops an entry no run has read for seven days.
+            - name: The pins of what reads the built packages
+              id: package-tools
+              env:
+                  PINS: rpm=4.18.2+dfsg-2.1build2 rpm2cpio=4.18.2+dfsg-2.1build2 cpio=2.15+dfsg-1ubuntu2.1
+              run: |
+                  set -eu
+                  echo "pins=$PINS" >> "$GITHUB_OUTPUT"
+                  echo "key=apt-rpm-$RUNNER_OS-$ImageOS-${PINS// /-}" >> "$GITHUB_OUTPUT"
+
+            - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              id: package-tools-cache
+              with:
+                  path: ~/.cache/porelo-apt/rpm
+                  key: ${{ steps.package-tools.outputs.key }}
+
             - name: What reads the built packages
-              run: sudo apt-get update -qq && sudo apt-get install -y -qq rpm rpm2cpio cpio
+              env:
+                  PINS: ${{ steps.package-tools.outputs.pins }}
+                  HIT: ${{ steps.package-tools-cache.outputs.cache-hit }}
+              run: |
+                  set -euo pipefail
+                  dir="$HOME/.cache/porelo-apt/rpm"
+                  if [ "$HIT" != true ]; then
+                      mkdir -p "$dir/partial"
+                      sudo apt-get update -qq
+                      # Every .deb the image lacks lands in the cached directory, nothing is installed yet.
+                      # shellcheck disable=SC2086
+                      sudo apt-get install -y -qq --download-only --allow-downgrades \
+                          -o Dir::Cache::archives="$dir" $PINS
+                      sudo rm -rf "$dir/partial" "$dir/lock"
+                      # An image that already holds every pin downloads nothing, and an empty path cannot be saved.
+                      touch "$dir/.kept"
+                  fi
+                  shopt -s nullglob
+                  debs=("$dir"/*.deb)
+                  if [ "${#debs[@]}" -gt 0 ]; then
+                      sudo dpkg -i "${debs[@]}"
+                  fi
+                  for tool in rpm rpm2cpio cpio; do
+                      command -v "$tool" > /dev/null \
+                          || { echo "::error::asked for $tool ($PINS) from ${#debs[@]} cached .deb(s); it is not on the PATH"; exit 1; }
+                  done
+                  rpm --version
+                  cpio --version | head -1
+
+            - if: steps.package-tools-cache.outputs.cache-hit != 'true'
+              uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+              with:
+                  path: ~/.cache/porelo-apt/rpm
+                  key: ${{ steps.package-tools.outputs.key }}
 
             # validate runs check-actions, check-shared, check-citations and check-readmes.
             - name: Build, tests, the executable and its package, and the shared checks
