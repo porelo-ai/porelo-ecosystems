@@ -20,7 +20,7 @@ out.
 | <a id="ec06"></a>[EC06](EC06-The-pip-Adapter.md) | - | - | A checkout built with pip gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 | <a id="ec07"></a>[EC07](EC07-The-Flutter-Adapter.md) | - | - | A checkout built with Flutter gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 
-## Analyzed
+## Estimated
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
