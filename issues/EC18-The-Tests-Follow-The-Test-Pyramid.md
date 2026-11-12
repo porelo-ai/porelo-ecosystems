@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC18",
   "title": "The Tests Follow The Test Pyramid",
-  "state": "Accepted",
+  "state": "Analyzed",
   "size": "M",
   "priority": "Medium",
   "rank": 1,
@@ -14,7 +14,8 @@
 }
 ```
 
-**Why this size.** two fixes in the Maven module's tests, one S and one M; no contract and no main code changes.
+**Why this size.** two fixes in the Maven module's tests, one S and one M, together about a day; no contract and no main
+code changes.
 
 **What must be true.** Every flow of the Maven adapter is proven by unit tests over fakes, the module's unit suite runs in
 under a minute, and only what nothing lower can show runs as an integration test, in the native executable or in a real
@@ -23,7 +24,9 @@ task.
 ## The audit
 
 Measured on the host, on `644cf86`, with the pinned GraalVM: `clean verify` took 3:33 min, `-Pnative verify` of the Maven
-module 95 s, of which 64 s built the image. Only `adapters/maven` holds code and tests; `shared`, `gradle`, `npm`, `pip` and
+module 95 s, of which 64 s built the image. Measured again on `c5cb097`, alone on the host, with the help plugin already in
+the local repository: `clean test` of the Maven module took 67 s, 430 tests, of which `RealMavenComparisonTest`'s 31 took
+46 s. Only `adapters/maven` holds code and tests; `shared`, `gradle`, `npm`, `pip` and
 `flutter` are empty modules, with no code and no tests.
 
 | Level | Suites | Tests | Share | Run time |
@@ -32,8 +35,8 @@ module 95 s, of which 64 s built the image. Only `adapters/maven` holds code and
 | Integration | `RealMavenComparisonTest` (real Maven, one process per case), 3 of `VendorHttpTest`'s (a loopback socket), `NativeExecutableIT` (the built executable, `-Pnative` only) | 38 | 9 % | 161 s, 1 s, 0.6 s after the image |
 | End-to-end | `corpus/`: one open source project built in a real task from Porelo's real first start; by hand, not in a workflow | 16 projects | 4 % | 3 to 11 min each, read from the results' folder times |
 
-The shares hold. The run time does not: `RealMavenComparisonTest` runs in Surefire, so the module's unit stage takes about
-190 s, three quarters of it real Maven.
+The shares hold. The run time does not: `RealMavenComparisonTest` runs in Surefire, so the module's unit stage takes 67 to
+190 s, depending on the machine's load, and real Maven is at least two thirds of it; without it, about 21 s.
 
 **Flows tested only above the unit level:**
 
@@ -61,15 +64,17 @@ reaches Maven Central only when it is missing there; as the oracle of real Maven
 - **M - The install lines run.** An integration test runs what `ToolLines.install` and `installBeside` write against a
   small archive served from a loopback server: a good digest installs and links, a wrong one stops before `tar`, a
   name a broken link holds stops `ln`, a tool beside another leaves the project's `java` first. Red first: the digest
-  check taken out of `ToolLines`.
+  check taken out of `ToolLines`. The lines write to `/opt` and `/usr/local/bin`; the test runs them with `bash` on the
+  build machine, with both paths swapped for directories under a temporary root, and asserts that the swap found each
+  place, so a path added to the lines later is not run against the real machine. No container: it would need an image
+  fetched by the test, and the harm guarded - a digest not checked, a link over the project's `java` - shows the same
+  under a temporary root. `curl`, `tar`, `sha256sum` and `sha512sum` are on the runner and here. It runs in Failsafe as
+  `ToolLinesIT`, in seconds.
+- **Test levels.** The merge sets: unit. The comparison with real Maven and the install lines: integration, in `verify`.
+  Nothing new goes to the native executable, a VM or the corpus.
 
 ## Acceptance
 
 - `./mvnw test` on `adapters/maven` takes under a minute, measured, and every case in `MergeFixtures` is asserted there.
 - The comparison with real Maven still runs in `verify` and goes red when a recorded set is changed.
 - The install lines' test goes red with the digest check taken out.
-
-## To be checked
-
-- Whether the install lines run in a container (Podman, on the runner too) or with their paths taken from a root a test
-  can set; `/opt` and `/usr/local/bin` are written into them today.
