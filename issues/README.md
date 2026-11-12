@@ -26,6 +26,12 @@ out.
 |---|---|---|---|
 | <a id="ec18"></a>[EC18](EC18-The-Tests-Follow-The-Test-Pyramid.md) | M | - | The tests follow the test pyramid: every merge case of poms and settings asserted in a unit test, the comparison with real Maven moved out of the unit stage so it runs in under a minute, and the install lines a tool gets in the image run in a test. |
 
+## Backlog
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec23"></a>[EC23](EC23-The-Issue-Heads-Are-Checked-Every-Day.md) | XS | - | The daily shared-rules check and each pull request's run check every issue head against issue-1.json with the released porelo-release's `issues check issues`, so a head the board refuses is caught on GitHub too. |
+
 ## Review
 
 | # | Size | Blocked by | What it covers |
