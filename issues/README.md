@@ -38,7 +38,6 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec26"></a>[EC26](EC26-A-Checked-In-Settings-File-Is-The-Tasks-Alone.md) | S | - | When the checkout holds the Maven settings its build uses, `Configure` writes no `.m2/settings.xml` for the task, and the draft names the checked-in file and says nothing was generated; only without one does the generated file stand in. |
 | <a id="ec01"></a>[EC01](EC01-A-Spike-Of-The-Model-Builder-In-A-Native-Image.md) | S | - | Whether MIMA serves the Maven adapter as a native image, by measurement: it does, and the bare model builder is proposed instead. |
 | <a id="ec22"></a>[EC22](EC22-The-Build-Takes-Its-Packages-From-A-Cache.md) | S | - | The Build takes the Ubuntu packages that read the built packages from a cache keyed by their pinned versions, and every cache of the workflows is dropped by GitHub once no run has read it for seven days. |
 | <a id="ec28"></a>[EC28](EC28-A-Workflows-Settings-File-Is-Found-Where-Its-Step-Runs.md) | S | - | What the reading of the shell form left over: a step's working directory, a folded block, a heredoc, a block of another key, a substitution too deep, and the notes on links and the limit of files. |
@@ -60,5 +59,6 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
+| <a id="ec26"></a>EC26 | S | - | A Checked-In Settings File Is The Task's Alone: when the checkout holds the Maven settings its build uses, `Configure` writes no `.m2/settings.xml` for the task and the draft names the checked-in file; only without one does the generated file stand in. |
 | <a id="ec09"></a>EC09 | L | - | A Project's Tools Installed In The Exact Version: what a project asks is installed in the exact version its vendor names, found once when its file is made, as ordinary image lines fetching by URL and digest, with its paths set and GraalVM brought for a native build. |
 | <a id="ec02"></a>EC02 | M | - | Maven Repository Hosts Recognized From A Checkout And The Settings: the Maven module answers the repository hosts a real build would reach, compared with real Maven, each with its file, line and origin. |
