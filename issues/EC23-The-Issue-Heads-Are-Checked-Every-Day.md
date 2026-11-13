@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC23",
   "title": "The Issue Heads Are Checked Every Day",
-  "state": "Implementing",
+  "state": "Review",
   "size": "XS",
   "priority": "Low",
   "rank": 2,
@@ -34,3 +34,12 @@ run and on every pull request.
 - On a copy of this repository, a head without `size` and one with `"rank": null` each make the step exit 1, naming
   the file and the field; on `main` as it is, the step passes.
 - `check-actions` and the *Workflow check* pass on the changed workflow.
+
+## As built
+
+- **The step** *The issue heads* follows *The documents* in `.github/workflows/shared-rules.yml` and runs
+  `issues check issues` with porelo-release at the version the root pom pins, on the daily run and on each pull
+  request.
+- **Checked on a copy:** on the heads as they are the command exits 0; a head without `size` exits 1 with
+  "required property 'size' not found", one with `"rank": null` exits 1 with "null found, integer expected", each
+  naming the file.

@@ -33,6 +33,11 @@ jobs:
             - name: The documents
               run: ./mvnw -B -U -s settings.xml -Pdocuments test
 
+            # Every issue head against issue-1.json, and the index as the heads give it: a head the board refuses fails
+            # here, naming its file and field, on the day's run and on each pull request.
+            - name: The issue heads
+              run: ./mvnw -B -s settings.xml -N exec:exec@release -Drelease.args="issues check issues"
+
             # A pull request's own commits held to the shared rule on commit messages. One from outside - from another
             # repository, or opened by someone not a member - also carries its author's Signed-off-by: on each commit,
             # the Developer Certificate of Origin; Dependabot's and GitHub's own commits are exempt by the author and

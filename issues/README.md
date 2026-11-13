@@ -34,12 +34,6 @@ out.
 |---|---|---|---|
 | <a id="ec28"></a>[EC28](EC28-A-Workflows-Settings-File-Is-Found-Where-Its-Step-Runs.md) | S | - | What the reading of the shell form left over: a step's working directory, a folded block, a heredoc, a block of another key, a substitution too deep, and the notes on links and the limit of files. |
 
-## Implementing
-
-| # | Size | Blocked by | What it covers |
-|---|---|---|---|
-| <a id="ec23"></a>[EC23](EC23-The-Issue-Heads-Are-Checked-Every-Day.md) | XS | - | The daily shared-rules check and each pull request's run check every issue head against issue-1.json with the released porelo-release's `issues check issues`, so a head the board refuses is caught on GitHub too. |
-
 ## Review
 
 | # | Size | Blocked by | What it covers |
@@ -59,6 +53,7 @@ out.
 | <a id="ec14"></a>[EC14](EC14-A-Toolchain-Plugin-Is-Warned-Of.md) | S | - | A plugin that picks or fetches its own JDK, `toolchains-maven-plugin` or Maven's own, gets a warning at its line naming the JDK it asks, instead of a build stopping on a refused host or a missing toolchain. |
 | <a id="ec20"></a>[EC20](EC20-The-Notes-Name-The-File-Porelo-Writes.md) | XS | - | The notes that say what to write name `porelo.yml`, the file Porelo now writes, not `project.yml`. |
 | <a id="ec11"></a>[EC11](EC11-The-Word-Ecosystem-Adapter.md) | M | - | "Ecosystem adapter" replaces "plugin" for what Porelo finds at run time, before a first release fixes the word: `plugins/` becomes `adapters/`, with every text a person reads; the package and installed paths stay. |
+| <a id="ec23"></a>[EC23](EC23-The-Issue-Heads-Are-Checked-Every-Day.md) | XS | - | The daily shared-rules check and each pull request's run check every issue head against issue-1.json with the released porelo-release's `issues check issues`, so a head the board refuses is caught on GitHub too. |
 
 ## Finished
 
