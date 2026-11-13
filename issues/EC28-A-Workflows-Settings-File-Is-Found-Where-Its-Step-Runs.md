@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC28",
   "title": "A Workflow's Settings File Is Found Where Its Step Runs",
-  "state": "Backlog",
+  "state": "Implementing",
   "size": "S",
   "priority": "Medium",
   "rank": 1,
