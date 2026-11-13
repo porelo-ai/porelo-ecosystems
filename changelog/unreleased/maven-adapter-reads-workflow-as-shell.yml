@@ -1,0 +1,2 @@
+title: Find the checked-in Maven settings file a workflow passes to Maven as a shell reads the line - a continued line, a path to mvn, sh -c and bash -ec, a quoted or escaped file, a substitution, a wrapper such as timeout or sudo, a workflow named in upper case - without taking a mention in another command or another key, and name a workflow not followed or a second settings file instead of skipping it.
+type: changed

@@ -113,10 +113,15 @@ public final class MavenEcosystem implements Ecosystem {
         findings.addAll(ToolRepository.of(answer.hosts()));
         answer.unknowns().forEach(unknown -> findings.add(ofUnknown(unknown)));
         Path checkout = directory.toAbsolutePath();
-        OwnSettings.of(checkout, MavenOptions.read(checkout)).ifPresent(findings::add);
+        OwnSettings.Answer own = OwnSettings.of(checkout, MavenOptions.read(checkout));
+        own.finding().ifPresent(findings::add);
         return new Detection(
                 findings.stream().distinct().toList(),
-                Stream.of(answer.unplaced(), containers.unplaced(), toolchains.unplaced())
+                Stream.of(
+                                answer.unplaced(),
+                                containers.unplaced(),
+                                toolchains.unplaced(),
+                                own.notes())
                         .flatMap(List::stream)
                         .map(MavenEcosystem::ofUnplaced)
                         .distinct()

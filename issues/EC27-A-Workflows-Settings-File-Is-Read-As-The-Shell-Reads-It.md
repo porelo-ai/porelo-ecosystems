@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC27",
   "title": "A Workflow's Settings File Is Read As The Shell Reads It",
-  "state": "Implementing",
+  "state": "Review",
   "size": "S",
   "priority": "Medium",
   "rank": 2,
@@ -38,3 +38,16 @@ generated.
 - Each form above answers `extension.ownSettings` with the line that names the file; `echo mvn -s settings.xml` does
   not.
 - A workflow too large, past the limit or linked from outside gives a note naming it, and its content is not read.
+
+## As built
+
+- **`ShellCommand`** reads a line as a shell does: commands at `;`, `&`, `|` and parentheses outside quotes, words with
+  quotes and backslashes taken away, what `$(…)` and backticks run as commands of their own, and Maven only as a
+  command's name - after assignments, `if`/`then`/`!`, and `sudo`, `env`, `time`, `timeout`, `nohup`, `xvfb-run` with
+  their options; `sh -c`, `bash -ec` and the like are read as their script.
+- **`OwnSettings`** cuts a comment only at a `#` outside quotes, reads a quoted `run:` value as YAML does, leaves out
+  the lines of another key (`- name: Build (mvn -s x)`), and names a second settings file once.
+- **The reading** (another model) found three reds - a `(` or backtick inside double quotes ended the quote, a
+  backslash before a quote was not an escape, a `#` inside quotes was cut as a comment - each fixed with a test seen
+  red first, as were the wrappers it named and `echo $(pwd)/mvnw -s x`. The too-large and past-the-limit tests now
+  hold a `-s` that must not be read. What else it found is [EC28](README.md#ec28).

@@ -2358,6 +2358,132 @@ class MavenEcosystemTest {
                     .noneMatch(x -> x.key().equals("extension.ownSettings"));
         }
 
+        private void workflow(String name, String body) throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom("settings.xml", CHECKED_IN)
+                    .pom(".github/workflows/" + name, body);
+        }
+
+        /**
+         * Harm prevented: the build's own settings file goes unseen, and a generated one stands
+         * beside it.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - run: mvn -B \\\n          -s settings.xml verify",
+                    "      - run: /usr/bin/mvn -s settings.xml verify",
+                    "      - run: $(pwd)/mvnw -s settings.xml verify",
+                    "      - run: sh -c \"mvn -s settings.xml verify\"",
+                    "      - run: MAVEN_OPTS=-Xmx1g ./mvnw --settings=settings.xml verify",
+                    "      - run: |\n          cd . && mvn -s 'settings.xml' verify",
+                    "      - run: echo \"$(date)\" && mvn -s settings.xml verify",
+                    "      - run: sh -c \"mvn -s \\\"settings.xml\\\" verify\"",
+                    "      - run: mvn -Dtag=\"build #1\" -s settings.xml verify",
+                    "      - run: if mvn -s settings.xml verify; then echo ok; fi",
+                    "      - run: timeout 10m mvn -s settings.xml verify",
+                    "      - run: bash -ec \"mvn -s settings.xml verify\"",
+                    "      - run: \"mvn -s settings.xml verify\"",
+                    "      - run: echo \\\"; mvn -s settings.xml verify"
+                })
+        void aSettingsFileIsFoundInTheFormsAShellReads(String run) throws IOException {
+            workflow("build.yml", "jobs:\n  build:\n    steps:\n" + run + "\n");
+
+            assertThat(only("extension.ownSettings").value())
+                    .as("found in %s", run)
+                    .isEqualTo("settings.xml");
+        }
+
+        /** Harm prevented: a workflow GitHub runs goes unread for the case of its name. */
+        @Test
+        void aWorkflowNamedInUpperCaseIsRead() throws IOException {
+            workflow("BUILD.YML", "      - run: mvn -s settings.xml verify\n");
+
+            assertThat(only("extension.ownSettings").file())
+                    .as("read")
+                    .isEqualTo(".github/workflows/BUILD.YML");
+        }
+
+        /** Harm prevented: a mention the build never runs takes the generated settings away. */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - run: echo mvn -s settings.xml",
+                    "      - name: Build (mvn -s settings.xml)",
+                    "      - run: echo \"run (mvn -s settings.xml) first\"",
+                    "      - run: echo $(pwd)/mvnw -s settings.xml"
+                })
+        void aMentionInAnotherCommandIsNotTheBuilds(String line) throws IOException {
+            workflow("build.yml", line + "\n");
+
+            assertThat(detect().findings())
+                    .as("not the build's in %s", line)
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+        }
+
+        private List<org.fuin.porelo.ecosystem.api.Unplaced> notesOn(String file) {
+            return detect().unplaced().stream().filter(u -> u.file().equals(file)).toList();
+        }
+
+        /** Harm prevented: a settings file is generated and the person cannot see why. */
+        @Test
+        void aWorkflowTooLargeToReadIsNamed() throws IOException {
+            workflow("big.yml", "      - run: mvn -s settings.xml\n" + "#".repeat(1024 * 1024));
+
+            assertThat(notesOn(".github/workflows/big.yml")).as("named, not skipped").hasSize(1);
+            assertThat(detect().findings())
+                    .as("its content not read")
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+        }
+
+        @Test
+        void workflowsPastTheLimitAreNamed() throws IOException {
+            f.pom("pom.xml", project("child", ""));
+            for (int i = 0; i < 64; i++) {
+                f.pom(".github/workflows/w%02d.yml".formatted(i), "on: push\n");
+            }
+            f.pom("settings.xml", CHECKED_IN)
+                    .pom(".github/workflows/w64.yml", "      - run: mvn -s settings.xml\n");
+
+            assertThat(notesOn(".github/workflows/w64.yml")).as("the 65th named").hasSize(1);
+            assertThat(detect().findings())
+                    .as("the 65th not read")
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+        }
+
+        /** Harm prevented: a file outside the checkout is read as the checkout's workflow. */
+        @Test
+        void aWorkflowLinkedFromOutsideIsNamedAndNotRead() throws IOException {
+            Path outside = f.home.resolve("w.yml");
+            Files.writeString(outside, "      - run: mvn -s settings.xml\n");
+            f.pom("pom.xml", project("child", "")).pom("settings.xml", CHECKED_IN);
+            Files.createDirectories(f.checkout.resolve(".github/workflows"));
+            Files.createSymbolicLink(f.checkout.resolve(".github/workflows/w.yml"), outside);
+
+            assertThat(detect().findings())
+                    .as("not read")
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+            assertThat(notesOn(".github/workflows/w.yml")).as("named").hasSize(1);
+        }
+
+        /** Harm prevented: which of two files counts is decided by the order of files, unseen. */
+        @Test
+        void aSecondSettingsFileIsNamed() throws IOException {
+            workflow("a.yml", "      - run: mvn -s settings.xml\n");
+            f.pom("other.xml", CHECKED_IN)
+                    .pom(
+                            ".github/workflows/b.yml",
+                            "      - run: mvn -s other.xml\n      - run: mvn -s other.xml\n");
+
+            assertThat(only("extension.ownSettings").value())
+                    .as("the first taken")
+                    .isEqualTo("settings.xml");
+            assertThat(notesOn(".github/workflows/b.yml"))
+                    .as("the other named once")
+                    .singleElement()
+                    .satisfies(u -> assertThat(u.note()).contains("other.xml"));
+        }
+
         /** Harm prevented: a block Porelo passes unread points the adapter out of the checkout. */
         @ParameterizedTest
         @ValueSource(strings = {"../settings.xml", "/etc/maven/settings.xml", "a/../../b.xml", ""})
