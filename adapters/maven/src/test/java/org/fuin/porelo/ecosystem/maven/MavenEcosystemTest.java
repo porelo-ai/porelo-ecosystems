@@ -2237,6 +2237,147 @@ class MavenEcosystemTest {
     }
 
     /**
+     * Harm prevented: a generated settings file stands beside the one the checkout's build uses, so
+     * the task's build reaches other repositories than the person's own build does.
+     */
+    @Nested
+    class OwnSettings {
+        private static final Repository INHOUSE =
+                new Repository("inhouse", "http://127.0.0.1:9420/inhouse/");
+
+        private static final String CHECKED_IN =
+                """
+                <settings><profiles><profile><id>corp</id>
+                  <repositories><repository><id>inhouse</id>
+                    <url>https://repo.example.org/maven</url></repository></repositories>
+                </profile></profiles>
+                <activeProfiles><activeProfile>corp</activeProfile></activeProfiles></settings>
+                """;
+
+        private List<File> configured() {
+            Map<String, Object> block = new java.util.LinkedHashMap<>();
+            detect().findings().stream()
+                    .filter(x -> x.key().startsWith("extension."))
+                    .forEach(x -> block.put(x.key().substring("extension.".length()), x.value()));
+            return new MavenEcosystem().configure(List.of(INHOUSE), new Extension(block));
+        }
+
+        @Test
+        void aSettingsFileTheConfigNamesInTheCheckoutIsTheTasksAlone() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom("settings.xml", CHECKED_IN)
+                    .pom(".mvn/maven.config", "-B\n-s\nsettings.xml\n");
+
+            Finding own = only("extension.ownSettings");
+
+            assertThat(List.of(own.value(), own.file(), own.line()))
+                    .as("the file, where the config names it")
+                    .isEqualTo(List.of("settings.xml", ".mvn/maven.config", 3));
+            assertThat(configured()).as("no file beside the checked-in one").isEmpty();
+        }
+
+        @Test
+        void aSettingsFileAWorkflowNamesInTheCheckoutIsTheTasksAlone() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom("build/settings.xml", CHECKED_IN)
+                    .pom(
+                            ".github/workflows/build.yml",
+                            """
+                            jobs:
+                              build:
+                                steps:
+                                  - run: ./mvnw -B -s build/settings.xml verify
+                            """);
+
+            Finding own = only("extension.ownSettings");
+
+            assertThat(List.of(own.value(), own.file(), own.line()))
+                    .isEqualTo(List.of("build/settings.xml", ".github/workflows/build.yml", 4));
+            assertThat(configured()).isEmpty();
+        }
+
+        @ParameterizedTest
+        @ValueSource(strings = {"none", "outside", "missing"})
+        void withoutACheckedInFileTheGeneratedOneStandsIn(String which) throws IOException {
+            f.pom("pom.xml", project("child", ""));
+            Path outside = f.home.resolve("corp-settings.xml");
+            Files.writeString(outside, CHECKED_IN);
+            switch (which) {
+                case "outside" -> f.pom(".mvn/maven.config", "-s\n" + outside + "\n");
+                case "missing" -> f.pom(".mvn/maven.config", "-s\nnot-there.xml\n");
+                default -> {}
+            }
+
+            assertThat(detect().findings()).noneMatch(x -> x.key().equals("extension.ownSettings"));
+            assertThat(configured()).as("the generated file").hasSize(1);
+        }
+
+        /**
+         * Harm prevented: a line the build never runs takes the generated settings away, and the
+         * task's build reaches neither file's repositories.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      # old: ./mvnw -s settings.xml verify",
+                    "      - run: ./mvnw verify # once: mvn -s settings.xml"
+                })
+        void aCommentNamingASettingsFileIsNotTheBuilds(String line) throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom("settings.xml", CHECKED_IN)
+                    .pom(
+                            ".github/workflows/build.yml",
+                            "jobs:\n  build:\n    steps:\n" + line + "\n");
+
+            assertThat(detect().findings()).noneMatch(x -> x.key().equals("extension.ownSettings"));
+        }
+
+        @Test
+        void aQuotedSettingsFileIsRead() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom("build/settings.xml", CHECKED_IN)
+                    .pom(
+                            ".github/workflows/build.yml",
+                            "      - run: mvn -s \"build/settings.xml\" verify\n");
+
+            assertThat(only("extension.ownSettings").value()).isEqualTo("build/settings.xml");
+        }
+
+        /**
+         * Harm prevented: a file of the person's, linked into the checkout, is taken as its own.
+         */
+        @Test
+        void aSettingsFileLinkedFromOutsideIsNotTheCheckouts() throws IOException {
+            Path outside = f.home.resolve("corp-settings.xml");
+            Files.writeString(outside, CHECKED_IN);
+            f.pom("pom.xml", project("child", "")).pom(".mvn/maven.config", "-s\nsettings.xml\n");
+            Files.createSymbolicLink(f.checkout.resolve("settings.xml"), outside);
+
+            assertThat(detect().findings())
+                    .as("a link that leaves the checkout")
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+        }
+
+        /** Harm prevented: a block Porelo passes unread points the adapter out of the checkout. */
+        @ParameterizedTest
+        @ValueSource(strings = {"../settings.xml", "/etc/maven/settings.xml", "a/../../b.xml", ""})
+        void anOwnSettingsOutsideTheCheckoutIsRefusedNamingItsKey(String path) {
+            assertThatThrownBy(
+                            () ->
+                                    new MavenEcosystem()
+                                            .configure(
+                                                    List.of(INHOUSE),
+                                                    new Extension(Map.of("ownSettings", path))))
+                    .isInstanceOfSatisfying(
+                            EcosystemRefused.class,
+                            e ->
+                                    assertThat(e.detail())
+                                            .as("names the key")
+                                            .contains("extensions.maven.ownSettings"));
+        }
+    }
+
+    /**
      * Harm prevented: a bumped Maven adds a type, and the executable fails on the first pom using
      * it.
      */

@@ -75,6 +75,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
+                    <!-- Bounded: unbounded, the fork takes a quarter of the machine's memory for the models it builds. -->
+                    <argLine>-Xmx1g</argLine>
                     <systemPropertyVariables>
                         <!-- Real Maven answers the comparison test, from the wrapper this build pins. -->
                         <test.maven.wrapper>${maven.multiModuleProjectDirectory}/mvnw</test.maven.wrapper>

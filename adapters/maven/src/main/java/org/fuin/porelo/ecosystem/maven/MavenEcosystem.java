@@ -112,6 +112,8 @@ public final class MavenEcosystem implements Ecosystem {
         answer.hosts().forEach(host -> findings.addAll(ofHost(host)));
         findings.addAll(ToolRepository.of(answer.hosts()));
         answer.unknowns().forEach(unknown -> findings.add(ofUnknown(unknown)));
+        Path checkout = directory.toAbsolutePath();
+        OwnSettings.of(checkout, MavenOptions.read(checkout)).ifPresent(findings::add);
         return new Detection(
                 findings.stream().distinct().toList(),
                 Stream.of(answer.unplaced(), containers.unplaced(), toolchains.unplaced())
@@ -156,7 +158,11 @@ public final class MavenEcosystem implements Ecosystem {
 
     @Override
     public List<File> configure(List<Repository> repositories, Extension extension) {
-        return MavenSettingsFile.of(repositories, MavenExtension.mirrorOf(extension, repositories));
+        Map<String, String> mirrorOf = MavenExtension.mirrorOf(extension, repositories);
+        if (MavenExtension.ownSettings(extension)) {
+            return List.of();
+        }
+        return MavenSettingsFile.of(repositories, mirrorOf);
     }
 
     private static List<Finding> ofHost(RepositoryHost host) {

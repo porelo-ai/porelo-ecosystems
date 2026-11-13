@@ -1,0 +1,2 @@
+title: Write no Maven settings file for a task when the checkout holds the one its build uses, named with -s in .mvn/maven.config or passed to Maven by a workflow of the checkout; the draft names that file and says that none is generated.
+type: added
