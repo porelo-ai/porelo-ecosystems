@@ -11,14 +11,16 @@ out.
 | <a id="ec15"></a>[EC15](EC15-What-The-Exact-Version-Step-Left-Unread.md) | - | - | What installing a project's tools in their exact version left unmeasured: a replaced `image.run`, the HTTP client's size, GraalVM's next asset names, Python's digests, and the online step's time. |
 | <a id="ec19"></a>[EC19](EC19-A-Central-Moved-By-A-Property-Names-Its-File.md) | - | - | A Central moved by the property `maven.repo.central` is answered with the file and line that set it, not as the machine's with no file. |
 
-## Accepted
+## Analyzed
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec04"></a>[EC04](EC04-The-Gradle-Adapter.md) | - | - | A checkout built with Gradle gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
-| <a id="ec05"></a>[EC05](EC05-The-npm-Adapter.md) | - | - | A checkout built with npm gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
-| <a id="ec06"></a>[EC06](EC06-The-pip-Adapter.md) | - | - | A checkout built with pip gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
-| <a id="ec07"></a>[EC07](EC07-The-Flutter-Adapter.md) | - | - | A checkout built with Flutter gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
+| <a id="ec25"></a>[EC25](EC25-The-Maven-Adapter-Matches-Porelos-Own-Builds.md) | S | - | Run on each of Porelo's own Maven repositories with its `porelo.yml` set aside, the Maven adapter's tools answer installs the same tools as that file, or names what it left out: `shfmt` for Spotless, `rpm` and `dpkg-dev` for the packaging plugins, GraalVM for a native build. |
+| <a id="ec24"></a>[EC24](EC24-The-Adapters-Share-Their-Answer-And-Packaging.md) | M | - | What every adapter needs and the Maven adapter holds alone today - the answer with file, line and origin, the unknown value, the exact-version download, the native build and the package - moves to `adapters/shared` and the parent pom, and the Build publishes a package per adapter, so a second adapter is only its own reading. |
+| <a id="ec04"></a>[EC04](EC04-The-Gradle-Adapter.md) | L | [EC24](README.md#ec24) | A checkout built with Gradle gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
+| <a id="ec05"></a>[EC05](EC05-The-npm-Adapter.md) | M | [EC24](README.md#ec24) | A checkout built with npm gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
+| <a id="ec06"></a>[EC06](EC06-The-pip-Adapter.md) | M | [EC24](README.md#ec24) | A checkout built with pip gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
+| <a id="ec07"></a>[EC07](EC07-The-Flutter-Adapter.md) | M | [EC24](README.md#ec24) | A checkout built with Flutter gets its tools and rules recognized by an adapter of its own, behind the `Ecosystem1` contract, under this repository's rules: never running the project's code, no network while it reads a checkout, every value with its file and line. |
 
 ## Estimated
 
