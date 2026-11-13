@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC26",
   "title": "A Checked-In Settings File Is The Task's Alone",
-  "state": "Backlog",
+  "state": "Implementing",
   "size": "S",
   "priority": "High",
   "rank": 1,

@@ -32,8 +32,13 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec26"></a>[EC26](EC26-A-Checked-In-Settings-File-Is-The-Tasks-Alone.md) | S | - | When the checkout holds the Maven settings its build uses, `Configure` writes no `.m2/settings.xml` for the task, and the draft names the checked-in file and says nothing was generated; only without one does the generated file stand in. |
 | <a id="ec23"></a>[EC23](EC23-The-Issue-Heads-Are-Checked-Every-Day.md) | XS | - | The daily shared-rules check and each pull request's run check every issue head against issue-1.json with the released porelo-release's `issues check issues`, so a head the board refuses is caught on GitHub too. |
+
+## Implementing
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec26"></a>[EC26](EC26-A-Checked-In-Settings-File-Is-The-Tasks-Alone.md) | S | - | When the checkout holds the Maven settings its build uses, `Configure` writes no `.m2/settings.xml` for the task, and the draft names the checked-in file and says nothing was generated; only without one does the generated file stand in. |
 
 ## Review
 
