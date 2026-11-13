@@ -2,37 +2,44 @@ package org.fuin.porelo.ecosystem.maven;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.fuin.porelo.ecosystem.api.Finding;
+import org.jspecify.annotations.Nullable;
+import org.yaml.snakeyaml.DumperOptions.ScalarStyle;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.error.YAMLException;
+import org.yaml.snakeyaml.nodes.MappingNode;
+import org.yaml.snakeyaml.nodes.Node;
+import org.yaml.snakeyaml.nodes.NodeTuple;
+import org.yaml.snakeyaml.nodes.ScalarNode;
+import org.yaml.snakeyaml.nodes.SequenceNode;
 
 /**
  * A settings file inside the checkout that the checkout's own build uses: named by {@code -s} in
- * {@code .mvn/maven.config}, or passed with {@code -s} to Maven in a workflow of the checkout. The
- * task's Maven then reads it alone, and no settings file is generated for the task.
+ * {@code .mvn/maven.config}, or passed with {@code -s} to Maven in a step of a workflow of the
+ * checkout, read from the directory the step runs in. The task's Maven then reads it alone, and no
+ * settings file is generated for the task.
  */
 final class OwnSettings {
     static final String KEY = "extension.ownSettings";
     private static final String WORKFLOWS = ".github/workflows";
     private static final int MAX_BYTES = 1024 * 1024;
     private static final int MAX_WORKFLOWS = 64;
-    // A step's command: after the list's dash and the key.
-    private static final Pattern RUN = Pattern.compile("\\s*(?:-\\s+)?run:\\s*(.*)");
-    // Another key of YAML, whose value Maven never runs.
-    private static final Pattern OTHER_KEY =
-            Pattern.compile("\\s*(?:-\\s+)?[A-Za-z_][\\w.-]*:(?:\\s.*)?");
-    // The indicator of a block, whose lines follow.
-    private static final Pattern BLOCK = Pattern.compile("[|>][-+0-9]*");
     private static final String NOTE =
             "the build uses the settings file checked in here, so Porelo generates none for the"
                     + " task";
@@ -66,24 +73,122 @@ final class OwnSettings {
                             .map(path -> Answers.rule(KEY, path, options.settingsPlace(), NOTE)),
                     List.of());
         }
-        List<Unplaced> notes = new ArrayList<>();
-        Finding taken = null;
-        Set<String> beside = new HashSet<>();
-        for (Path workflow : workflows(checkout, notes)) {
+        Reading reading = new Reading(checkout);
+        List<Path> workflows = workflows(checkout, reading.notes);
+        for (int index = 0; index < workflows.size(); index++) {
+            Path workflow = workflows.get(index);
             String file = checkout.relativize(workflow).toString();
-            Optional<List<String>> lines = lines(workflow);
-            if (lines.isEmpty()) {
+            if (index >= MAX_WORKFLOWS) {
+                reading.notes.add(
+                        note(
+                                "this workflow is past the "
+                                        + MAX_WORKFLOWS
+                                        + " read"
+                                        + NOT_FOLLOWED,
+                                file));
+            } else if (!ownFile(checkout, workflow)) {
+                reading.notes.add(
+                        note(
+                                "this workflow lies outside the checkout, by a link" + NOT_FOLLOWED,
+                                file));
+            } else {
+                reading.workflow(file, workflow);
+            }
+        }
+        return new Answer(Optional.ofNullable(reading.taken), List.copyOf(reading.notes));
+    }
+
+    // What the workflows say, gathered in the order they are read.
+    private static final class Reading {
+        private final Path checkout;
+        private final List<Unplaced> notes = new ArrayList<>();
+        private final Set<String> beside = new HashSet<>();
+        private @Nullable Finding taken;
+
+        Reading(Path checkout) {
+            this.checkout = checkout;
+        }
+
+        void workflow(String file, Path workflow) {
+            Optional<String> text = text(workflow);
+            if (text.isEmpty()) {
                 notes.add(
                         note("this workflow is too large or cannot be read" + NOT_FOLLOWED, file));
-                continue;
+                return;
             }
-            for (Line line : logical(lines.get())) {
+            Node root;
+            try {
+                root =
+                        new Yaml(new SafeConstructor(options()))
+                                .compose(new StringReader(text.get()));
+            } catch (YAMLException e) {
+                notes.add(note("this workflow is no YAML GitHub reads" + NOT_FOLLOWED, file));
+                return;
+            }
+            // As GitHub reads it: a job's default replaces the workflow's, a step's own replaces
+            // both, and each is relative to the checkout's root.
+            @Nullable Node workflowDefault = defaultDirectory(root);
+            Set<Node> read = Collections.newSetFromMap(new IdentityHashMap<>());
+            for (Node job : values(get(root, "jobs"))) {
+                @Nullable Node jobDefault = defaultDirectory(job);
+                if (!(get(job, "steps") instanceof SequenceNode steps)) {
+                    continue;
+                }
+                for (Node step : steps.getValue()) {
+                    // A script an alias names again is the same script, read once.
+                    if (get(step, "run") instanceof ScalarNode run && read.add(run)) {
+                        @Nullable Node own = get(step, "working-directory");
+                        @Nullable Node written =
+                                own != null
+                                        ? own
+                                        : jobDefault != null ? jobDefault : workflowDefault;
+                        step(file, run, ShellCommand.directory(scalar(written), ""));
+                    }
+                }
+            }
+        }
+
+        // The lines of a step's script, from the directory it runs in. Only a literal block keeps
+        // the lines of the file; any other value is placed at its first line.
+        private void step(String file, ScalarNode run, @Nullable String directory) {
+            int start = run.getStartMark().getLine() + 1;
+            boolean literal = run.getScalarStyle() == ScalarStyle.LITERAL;
+            int block = run.getScalarStyle() == ScalarStyle.FOLDED ? start + 1 : start;
+            ShellCommand shell = new ShellCommand(directory);
+            String[] lines = run.getValue().split("\n", -1);
+            StringBuilder current = new StringBuilder();
+            int first = 0;
+            for (int i = 0; i < lines.length; i++) {
+                String text = ShellCommand.withoutComment(lines[i]);
+                if (current.isEmpty()) {
+                    first = i;
+                }
+                // A line ending in '\' is joined with the next, as the shell joins them.
+                if (text.endsWith("\\") && i + 1 < lines.length) {
+                    current.append(text, 0, text.length() - 1).append(' ');
+                    continue;
+                }
+                current.append(text);
+                int number = literal ? start + 1 + first : block;
+                Place place = new Place(file, number, Origin.CHECKOUT);
                 Optional<String> path =
-                        ShellCommand.settingsFile(line.text()).flatMap(p -> inside(checkout, p));
+                        shell.settingsFile(current.toString()).flatMap(p -> inside(checkout, p));
+                current.setLength(0);
+                // A heredoc's lines are its input, no commands.
+                for (ShellCommand.Heredoc heredoc : shell.heredocs()) {
+                    while (++i < lines.length && !heredoc.endsAt(lines[i])) {
+                        // the heredoc's input
+                    }
+                }
+                if (shell.tooDeep()) {
+                    notes.add(
+                            new Unplaced(
+                                    "a command here is nested too deep to read" + NOT_FOLLOWED,
+                                    place));
+                }
                 if (path.isEmpty()) {
                     continue;
                 }
-                Place place = new Place(file, line.number(), Origin.CHECKOUT);
                 if (taken == null) {
                     taken = Answers.rule(KEY, path.get(), place, NOTE);
                 } else if (!taken.value().equals(path.get()) && beside.add(path.get())) {
@@ -102,64 +207,41 @@ final class OwnSettings {
                 }
             }
         }
-        return new Answer(Optional.ofNullable(taken), List.copyOf(notes));
     }
 
-    private record Line(String text, int number) {}
-
-    // Each line without its comment and YAML's step markers, a line ending in '\' joined with
-    // the next as the shell joins them, at the number of its first line. A line of another key
-    // is left out.
-    private static List<Line> logical(List<String> lines) {
-        List<Line> logical = new ArrayList<>();
-        StringBuilder current = new StringBuilder();
-        int first = 0;
-        for (int i = 0; i < lines.size(); i++) {
-            String text = ShellCommand.withoutComment(lines.get(i));
-            if (current.isEmpty()) {
-                first = i + 1;
-                Matcher run = RUN.matcher(text);
-                if (run.matches()) {
-                    text = scalar(run.group(1).strip());
-                } else if (OTHER_KEY.matcher(text).matches()) {
-                    continue;
-                }
-            }
-            if (text.endsWith("\\")) {
-                current.append(text, 0, text.length() - 1).append(' ');
-                continue;
-            }
-            current.append(text);
-            logical.add(new Line(current.toString(), first));
-            current.setLength(0);
-        }
-        if (!current.isEmpty()) {
-            logical.add(new Line(current.toString(), first));
-        }
-        return logical;
+    private static LoaderOptions options() {
+        LoaderOptions options = new LoaderOptions();
+        options.setMaxAliasesForCollections(50);
+        options.setAllowRecursiveKeys(false);
+        return options;
     }
 
-    // A run value as YAML reads it: a block's indicator stands for no text, quotes are taken away.
-    private static String scalar(String value) {
-        if (BLOCK.matcher(value).matches()) {
-            return "";
-        }
-        if (value.length() >= 2 && value.startsWith("\"") && value.endsWith("\"")) {
-            String inner = value.substring(1, value.length() - 1);
-            StringBuilder read = new StringBuilder();
-            for (int i = 0; i < inner.length(); i++) {
-                char c = inner.charAt(i);
-                if (c == '\\' && i + 1 < inner.length()) {
-                    c = inner.charAt(++i);
+    // The working directory under defaults.run.
+    private static @Nullable Node defaultDirectory(@Nullable Node node) {
+        return get(get(get(node, "defaults"), "run"), "working-directory");
+    }
+
+    private static @Nullable Node get(@Nullable Node node, String key) {
+        if (node instanceof MappingNode mapping) {
+            for (NodeTuple tuple : mapping.getValue()) {
+                if (tuple.getKeyNode() instanceof ScalarNode name && name.getValue().equals(key)) {
+                    return tuple.getValueNode();
                 }
-                read.append(c);
             }
-            return read.toString();
         }
-        if (value.length() >= 2 && value.startsWith("'") && value.endsWith("'")) {
-            return value.substring(1, value.length() - 1).replace("''", "'");
+        return null;
+    }
+
+    private static List<Node> values(@Nullable Node node) {
+        List<Node> values = new ArrayList<>();
+        if (node instanceof MappingNode mapping) {
+            mapping.getValue().forEach(tuple -> values.add(tuple.getValueNode()));
         }
-        return value;
+        return values;
+    }
+
+    private static @Nullable String scalar(@Nullable Node node) {
+        return node instanceof ScalarNode value ? value.getValue() : null;
     }
 
     private static Unplaced note(String why, String file) {
@@ -200,6 +282,7 @@ final class OwnSettings {
         return Optional.of(checkout.relativize(file).toString());
     }
 
+    // The workflow files in name order: files and links, never a directory named like one.
     private static List<Path> workflows(Path checkout, List<Unplaced> notes) {
         Path directory = checkout.resolve(WORKFLOWS);
         List<Path> found = new ArrayList<>();
@@ -209,7 +292,10 @@ final class OwnSettings {
         try (DirectoryStream<Path> files = Files.newDirectoryStream(directory)) {
             for (Path file : files) {
                 String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
-                if (name.endsWith(".yml") || name.endsWith(".yaml")) {
+                boolean workflow =
+                        Files.isSymbolicLink(file)
+                                || Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS);
+                if (workflow && (name.endsWith(".yml") || name.endsWith(".yaml"))) {
                     found.add(file);
                 }
             }
@@ -218,27 +304,7 @@ final class OwnSettings {
             return List.of();
         }
         found.sort(null);
-        List<Path> read = new ArrayList<>();
-        for (Path file : found) {
-            String name = checkout.relativize(file).toString();
-            if (read.size() == MAX_WORKFLOWS) {
-                notes.add(
-                        note(
-                                "this workflow is past the "
-                                        + MAX_WORKFLOWS
-                                        + " read"
-                                        + NOT_FOLLOWED,
-                                name));
-            } else if (!ownFile(checkout, file)) {
-                notes.add(
-                        note(
-                                "this workflow lies outside the checkout, by a link" + NOT_FOLLOWED,
-                                name));
-            } else {
-                read.add(file);
-            }
-        }
-        return read;
+        return found;
     }
 
     // A regular file whose real place is inside the checkout's.
@@ -250,12 +316,12 @@ final class OwnSettings {
         }
     }
 
-    private static Optional<List<String>> lines(Path file) {
+    private static Optional<String> text(Path file) {
         try (InputStream in = Files.newInputStream(file)) {
             byte[] bytes = in.readNBytes(MAX_BYTES + 1);
             return bytes.length > MAX_BYTES
                     ? Optional.empty()
-                    : Optional.of(new String(bytes, StandardCharsets.UTF_8).lines().toList());
+                    : Optional.of(new String(bytes, StandardCharsets.UTF_8));
         } catch (IOException e) {
             return Optional.empty();
         }

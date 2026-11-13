@@ -1,0 +1,2 @@
+title: Read a workflow's steps as GitHub runs them when finding the checked-in Maven settings file - from the step's working-directory or the job's or workflow's default, a cd, pushd or popd that surely runs before Maven, a folded run block joined, a heredoc and another key's block left out, mvnd as Maven - and take no file where the directory cannot be known; name a workflow that is no YAML or a command nested too deep instead of skipping it.
+type: changed

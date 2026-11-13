@@ -2254,6 +2254,9 @@ class MavenEcosystemTest {
                 <activeProfiles><activeProfile>corp</activeProfile></activeProfiles></settings>
                 """;
 
+        // What a workflow puts before its steps.
+        private static final String STEPS = "jobs:\n  build:\n    steps:\n";
+
         private List<File> configured() {
             Map<String, Object> block = new java.util.LinkedHashMap<>();
             detect().findings().stream()
@@ -2338,7 +2341,7 @@ class MavenEcosystemTest {
                     .pom("build/settings.xml", CHECKED_IN)
                     .pom(
                             ".github/workflows/build.yml",
-                            "      - run: mvn -s \"build/settings.xml\" verify\n");
+                            STEPS + "      - run: mvn -s \"build/settings.xml\" verify\n");
 
             assertThat(only("extension.ownSettings").value()).isEqualTo("build/settings.xml");
         }
@@ -2361,7 +2364,7 @@ class MavenEcosystemTest {
         private void workflow(String name, String body) throws IOException {
             f.pom("pom.xml", project("child", ""))
                     .pom("settings.xml", CHECKED_IN)
-                    .pom(".github/workflows/" + name, body);
+                    .pom(".github/workflows/" + name, body.contains("jobs:") ? body : STEPS + body);
         }
 
         /**
@@ -2371,7 +2374,7 @@ class MavenEcosystemTest {
         @ParameterizedTest
         @ValueSource(
                 strings = {
-                    "      - run: mvn -B \\\n          -s settings.xml verify",
+                    "      - run: |\n          mvn -B \\\n            -s settings.xml verify",
                     "      - run: /usr/bin/mvn -s settings.xml verify",
                     "      - run: $(pwd)/mvnw -s settings.xml verify",
                     "      - run: sh -c \"mvn -s settings.xml verify\"",
@@ -2379,12 +2382,19 @@ class MavenEcosystemTest {
                     "      - run: |\n          cd . && mvn -s 'settings.xml' verify",
                     "      - run: echo \"$(date)\" && mvn -s settings.xml verify",
                     "      - run: sh -c \"mvn -s \\\"settings.xml\\\" verify\"",
-                    "      - run: mvn -Dtag=\"build #1\" -s settings.xml verify",
+                    "      - run: |\n          mvn -Dtag=\"build #1\" -s settings.xml verify",
+                    "      - run: >-\n          mvn -B\n          -s settings.xml verify",
+                    "      - run: |\n          cat <<EOF > notes.txt\n          ok\n          EOF\n"
+                            + "          mvn -s settings.xml verify",
                     "      - run: if mvn -s settings.xml verify; then echo ok; fi",
                     "      - run: timeout 10m mvn -s settings.xml verify",
                     "      - run: bash -ec \"mvn -s settings.xml verify\"",
                     "      - run: \"mvn -s settings.xml verify\"",
-                    "      - run: echo \\\"; mvn -s settings.xml verify"
+                    "      - run: echo \\\"; mvn -s settings.xml verify",
+                    "      - run: |\n          echo \"<<EOF\"\n          mvn -s settings.xml verify",
+                    "      - run: |\n          echo $((1<<2))\n          mvn -s settings.xml verify",
+                    "      - run: |\n          cat <<<x\n          mvn -s settings.xml verify",
+                    "      - run: mvnd -s settings.xml verify"
                 })
         void aSettingsFileIsFoundInTheFormsAShellReads(String run) throws IOException {
             workflow("build.yml", "jobs:\n  build:\n    steps:\n" + run + "\n");
@@ -2392,6 +2402,212 @@ class MavenEcosystemTest {
             assertThat(only("extension.ownSettings").value())
                     .as("found in %s", run)
                     .isEqualTo("settings.xml");
+        }
+
+        /**
+         * Harm prevented: the root's settings file is taken where the step runs Maven in a
+         * directory with a file of its own, and the task's build reads the wrong repositories.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - run: cd sub && mvn -s settings.xml verify",
+                    "      - run: |\n          cd sub\n          mvn -s settings.xml verify",
+                    "      - working-directory: sub\n        run: mvn -s settings.xml verify",
+                    "      - run: mvn -s settings.xml verify\n        working-directory: ./sub",
+                    "      - run: (cd sub; mvn -s settings.xml verify)",
+                    "      - run: |\n          mvn -s missing.xml install; cd sub\n"
+                            + "          mvn -s settings.xml verify",
+                    "      - run: cd sub || exit 1; mvn -s settings.xml verify",
+                    "      - run: pushd a; popd; pushd sub; mvn -s settings.xml verify",
+                    "      - working-directory: sub\n        run: cd ../sub && mvn -s settings.xml"
+                })
+        void aSettingsFileIsReadWhereTheStepRuns(String step) throws IOException {
+            f.pom("sub/settings.xml", CHECKED_IN).pom("a/settings.xml", CHECKED_IN);
+            workflow("build.yml", step + "\n");
+
+            assertThat(only("extension.ownSettings").value())
+                    .as("where %s runs", step)
+                    .isEqualTo("sub/settings.xml");
+        }
+
+        /**
+         * Harm prevented: the root's settings file is taken for a job that runs elsewhere, or a
+         * file under a directory GitHub never joins to it.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "defaults:\n  run:\n    working-directory: sub\n" + STEPS,
+                    "jobs:\n  build:\n    defaults:\n      run:\n        working-directory: sub\n"
+                            + "    steps:\n",
+                    "defaults:\n  run:\n    working-directory: a\n"
+                            + "jobs:\n  build:\n    defaults:\n      run:\n        working-directory:"
+                            + " sub\n    steps:\n",
+                    "defaults:\n  run:\n    working-directory: ${{ inputs.dir }}\n"
+                            + "jobs:\n  build:\n    defaults:\n      run:\n        working-directory:"
+                            + " sub\n    steps:\n",
+                    "jobs:\n  build:\n    defaults:\n      run:\n        working-directory: a\n"
+                            + "    steps:\n      - working-directory: sub\n"
+                })
+        void aDefaultWorkingDirectoryIsWhereTheStepsRun(String head) throws IOException {
+            f.pom("sub/settings.xml", CHECKED_IN).pom("a/sub/settings.xml", CHECKED_IN);
+            String run = head.endsWith("- working-directory: sub\n") ? "        " : "      - ";
+            workflow("build.yml", head + run + "run: mvn -s settings.xml verify\n");
+
+            assertThat(only("extension.ownSettings").value())
+                    .as("under %s", head)
+                    .isEqualTo("sub/settings.xml");
+        }
+
+        /**
+         * Harm prevented: a file is taken in a directory the adapter cannot know, though the build
+         * runs elsewhere.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - run: cd \"$HOME\" && mvn -s settings.xml verify",
+                    "      - run: cd .. && mvn -s settings.xml verify",
+                    "      - working-directory: ${{ matrix.dir }}\n        run: mvn -s settings.xml",
+                    "      - run: if [ -d sub ]; then cd sub; fi; mvn -s settings.xml verify",
+                    "      - run: \"[ -d sub ] && cd sub; mvn -s settings.xml verify\"",
+                    "      - run: cd sub || true; mvn -s settings.xml verify",
+                    "      - run: cd -; mvn -s settings.xml verify",
+                    "      - run: cd; mvn -s settings.xml verify",
+                    "      - run: popd; mvn -s settings.xml verify"
+                })
+        void aSettingsFileInADirectoryNotKnownIsNotTaken(String step) throws IOException {
+            f.pom("sub/settings.xml", CHECKED_IN);
+            workflow("build.yml", step + "\n");
+
+            assertThat(detect().findings())
+                    .as("unknown where %s runs", step)
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+        }
+
+        /**
+         * Harm prevented: a directory a command leaves only for itself moves the root's build, and
+         * the file of that directory is taken.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - run: (cd sub && echo x); mvn -s settings.xml verify",
+                    "      - run: |\n          (cd sub; echo x)\n          mvn -s settings.xml verify",
+                    "      - run: V=$(cd sub && pwd) && mvn -s settings.xml verify",
+                    "      - run: echo `cd sub` && mvn -s settings.xml verify",
+                    "      - run: sh -c 'cd sub' && mvn -s settings.xml verify",
+                    "      - run: V=$(mvn -s settings.xml help:evaluate) && cd sub",
+                    "      - run: pushd sub; popd; mvn -s settings.xml verify"
+                })
+        void aDirectoryLeftForOneCommandIsNotTheBuilds(String step) throws IOException {
+            f.pom("sub/settings.xml", CHECKED_IN);
+            workflow("build.yml", step + "\n");
+
+            assertThat(only("extension.ownSettings").value())
+                    .as("the root's for %s", step)
+                    .isEqualTo("settings.xml");
+        }
+
+        /**
+         * Harm prevented: a line the person points at is not the one that names the file, or the
+         * same command read many times through an alias.
+         */
+        @ParameterizedTest
+        @CsvSource(
+                delimiter = '|',
+                value = {
+                    "- run: >~          echo start~~          mvn -s settings.xml~ | 5",
+                    "- run: ^echo start\\nmvn -s settings.xml^ | 4",
+                    "- run: echo start &&~          mvn -s settings.xml~ | 4"
+                })
+        void aFileOutsideALiteralBlockIsAtTheValuesLine(String step, int line) throws IOException {
+            workflow("build.yml", "      " + step.replace("~", "\n").replace("^", "\"") + "\n");
+
+            assertThat(only("extension.ownSettings").line())
+                    .as("the line of %s", step)
+                    .isEqualTo(line);
+        }
+
+        /** Harm prevented: one script named by an alias is read, and named, once per alias. */
+        @Test
+        void aScriptReadThroughAnAliasIsReadOnce() throws IOException {
+            String deep = "echo $(echo $(echo $(echo $(echo $(echo $(mvn -s settings.xml))))))";
+            workflow(
+                    "build.yml",
+                    "      - run: &deep " + deep + "\n      - run: *deep\n      - run: *deep\n");
+
+            assertThat(notesOn(".github/workflows/build.yml")).as("named once").hasSize(1);
+        }
+
+        /** Harm prevented: a workflow GitHub cannot read is passed over without a word. */
+        @Test
+        void aWorkflowThatIsNoYamlIsNamed() throws IOException {
+            workflow("build.yml", "jobs: [\n  - run: mvn -s settings.xml\n");
+
+            assertThat(notesOn(".github/workflows/build.yml")).as("named").hasSize(1);
+        }
+
+        /** Harm prevented: the person is sent to a line of the block that names no file. */
+        @Test
+        void aFileInABlockIsAtItsOwnLine() throws IOException {
+            workflow(
+                    "build.yml",
+                    "      - run: |\n          echo start\n          mvn -s settings.xml\n");
+
+            assertThat(only("extension.ownSettings").line()).as("the line of mvn").isEqualTo(6);
+        }
+
+        /** Harm prevented: a command nested too deep to read is passed over without a word. */
+        @Test
+        void aCommandNestedTooDeepIsNamed() throws IOException {
+            workflow(
+                    "build.yml",
+                    "      - run: echo $(echo $(echo $(echo $(echo $(echo $(mvn -s settings.xml))))))\n");
+
+            assertThat(notesOn(".github/workflows/build.yml"))
+                    .as("named at its line")
+                    .singleElement()
+                    .satisfies(u -> assertThat(u.line()).isEqualTo(4));
+        }
+
+        /** Harm prevented: a directory is reported as a link out of the checkout. */
+        @Test
+        void aDirectoryNamedLikeAWorkflowIsNoWorkflow() throws IOException {
+            workflow("build.yml", "      - run: mvn verify\n");
+            Files.createDirectories(f.checkout.resolve(".github/workflows/old.yml"));
+
+            assertThat(notesOn(".github/workflows/old.yml")).as("not a workflow").isEmpty();
+        }
+
+        /** Harm prevented: links out of the checkout lift the limit of workflows read. */
+        @Test
+        void aLinkedWorkflowCountsAgainstTheLimit() throws IOException {
+            Path outside = f.home.resolve("w.yml");
+            Files.writeString(outside, "on: push\n");
+            workflow("w64.yml", "      - run: mvn -s settings.xml\n");
+            Files.createSymbolicLink(f.checkout.resolve(".github/workflows/w00.yml"), outside);
+            for (int i = 1; i < 64; i++) {
+                f.pom(".github/workflows/w%02d.yml".formatted(i), "on: push\n");
+            }
+
+            assertThat(notesOn(".github/workflows/w64.yml")).as("the 65th named").hasSize(1);
+        }
+
+        /**
+         * Harm prevented: the notes on what was not followed come in an order no one can follow.
+         */
+        @Test
+        void theNotesComeInTheOrderOfTheFiles() throws IOException {
+            Path outside = f.home.resolve("w.yml");
+            Files.writeString(outside, "on: push\n");
+            workflow("a.yml", "#".repeat(1024 * 1024 + 1));
+            Files.createSymbolicLink(f.checkout.resolve(".github/workflows/b.yml"), outside);
+
+            assertThat(detect().unplaced().stream().map(u -> u.file()).toList())
+                    .as("a before b")
+                    .containsSubsequence(".github/workflows/a.yml", ".github/workflows/b.yml");
         }
 
         /** Harm prevented: a workflow GitHub runs goes unread for the case of its name. */
@@ -2411,7 +2627,19 @@ class MavenEcosystemTest {
                     "      - run: echo mvn -s settings.xml",
                     "      - name: Build (mvn -s settings.xml)",
                     "      - run: echo \"run (mvn -s settings.xml) first\"",
-                    "      - run: echo $(pwd)/mvnw -s settings.xml"
+                    "      - run: echo $(pwd)/mvnw -s settings.xml",
+                    "      - run: |\n          cat <<'EOF' > notes.txt\n          mvn -s settings.xml\n"
+                            + "          EOF",
+                    "      - uses: some/action@v1\n        with:\n          script: |\n"
+                            + "            mvn -s settings.xml",
+                    "      - run: |\n          cat <<\\EOF > notes.txt\n          mvn -s settings.xml\n"
+                            + "          EOF",
+                    "      - run: |\n          cat <<'END-MARK' > notes.txt\n"
+                            + "          mvn -s settings.xml\n          END-MARK",
+                    "      - run: |\n          cat <<-EOF > notes.txt\n          \tmvn -s settings.xml\n"
+                            + "          \tEOF",
+                    "      - run: |\n          cat <<EOF > notes.txt; echo x\n          mvn -s settings.xml\n"
+                            + "          EOF"
                 })
         void aMentionInAnotherCommandIsNotTheBuilds(String line) throws IOException {
             workflow("build.yml", line + "\n");
@@ -2443,7 +2671,7 @@ class MavenEcosystemTest {
                 f.pom(".github/workflows/w%02d.yml".formatted(i), "on: push\n");
             }
             f.pom("settings.xml", CHECKED_IN)
-                    .pom(".github/workflows/w64.yml", "      - run: mvn -s settings.xml\n");
+                    .pom(".github/workflows/w64.yml", STEPS + "      - run: mvn -s settings.xml\n");
 
             assertThat(notesOn(".github/workflows/w64.yml")).as("the 65th named").hasSize(1);
             assertThat(detect().findings())
@@ -2473,7 +2701,9 @@ class MavenEcosystemTest {
             f.pom("other.xml", CHECKED_IN)
                     .pom(
                             ".github/workflows/b.yml",
-                            "      - run: mvn -s other.xml\n      - run: mvn -s other.xml\n");
+                            STEPS
+                                    + "      - run: mvn -s other.xml\n"
+                                    + "      - run: mvn -s other.xml\n");
 
             assertThat(only("extension.ownSettings").value())
                     .as("the first taken")
