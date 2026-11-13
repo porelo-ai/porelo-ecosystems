@@ -8,7 +8,7 @@
   "state": "Backlog",
   "size": "XS",
   "priority": "Low",
-  "rank": 1,
+  "rank": 2,
   "blockedBy": [],
   "covers": "The daily shared-rules check and each pull request's run check every issue head against issue-1.json with the released porelo-release's `issues check issues`, so a head the board refuses is caught on GitHub too."
 }
