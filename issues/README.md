@@ -32,8 +32,13 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec27"></a>[EC27](EC27-A-Workflows-Settings-File-Is-Read-As-The-Shell-Reads-It.md) | S | - | The checked-in settings file a workflow passes to Maven is found in the forms a shell reads - a continued line, a path to `mvn`, a quoted command, `.YML` - and what is not followed is named, never skipped silently. |
 | <a id="ec23"></a>[EC23](EC23-The-Issue-Heads-Are-Checked-Every-Day.md) | XS | - | The daily shared-rules check and each pull request's run check every issue head against issue-1.json with the released porelo-release's `issues check issues`, so a head the board refuses is caught on GitHub too. |
+
+## Implementing
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec27"></a>[EC27](EC27-A-Workflows-Settings-File-Is-Read-As-The-Shell-Reads-It.md) | S | - | The checked-in settings file a workflow passes to Maven is found in the forms a shell reads - a continued line, a path to `mvn`, a quoted command, `.YML` - and what is not followed is named, never skipped silently. |
 
 ## Review
 

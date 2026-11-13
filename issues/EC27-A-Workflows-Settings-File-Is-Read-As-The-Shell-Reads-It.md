@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC27",
   "title": "A Workflow's Settings File Is Read As The Shell Reads It",
-  "state": "Backlog",
+  "state": "Implementing",
   "size": "S",
   "priority": "Medium",
   "rank": 2,
