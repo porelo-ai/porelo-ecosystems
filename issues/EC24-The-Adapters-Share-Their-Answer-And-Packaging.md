@@ -7,7 +7,7 @@
   "title": "The Adapters Share Their Answer And Packaging",
   "state": "Analyzed",
   "size": "M",
-  "priority": "High",
+  "priority": "Medium",
   "rank": 2,
   "blockedBy": [],
   "covers": "What every adapter needs and the Maven adapter holds alone today - the answer with file, line and origin, the unknown value, the exact-version download, the native build and the package - moves to `adapters/shared` and the parent pom, and the Build publishes a package per adapter, so a second adapter is only its own reading."

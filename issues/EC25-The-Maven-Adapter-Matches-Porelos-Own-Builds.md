@@ -7,7 +7,7 @@
   "title": "The Maven Adapter Matches Porelo's Own Builds",
   "state": "Analyzed",
   "size": "S",
-  "priority": "High",
+  "priority": "Medium",
   "rank": 1,
   "blockedBy": [],
   "covers": "Run on each of Porelo's own Maven repositories with its `porelo.yml` set aside, the Maven adapter's tools answer installs the same tools as that file, or names what it left out: `shfmt` for Spotless, `rpm` and `dpkg-dev` for the packaging plugins, GraalVM for a native build."
