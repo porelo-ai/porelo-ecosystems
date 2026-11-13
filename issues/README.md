@@ -33,6 +33,11 @@ out.
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
 | <a id="ec28"></a>[EC28](EC28-A-Workflows-Settings-File-Is-Found-Where-Its-Step-Runs.md) | S | - | What the reading of the shell form left over: a step's working directory, a folded block, a heredoc, a block of another key, a substitution too deep, and the notes on links and the limit of files. |
+
+## Implementing
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
 | <a id="ec23"></a>[EC23](EC23-The-Issue-Heads-Are-Checked-Every-Day.md) | XS | - | The daily shared-rules check and each pull request's run check every issue head against issue-1.json with the released porelo-release's `issues check issues`, so a head the board refuses is caught on GitHub too. |
 
 ## Review
