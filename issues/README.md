@@ -38,6 +38,7 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
+| <a id="ec30"></a>[EC30](EC30-The-Docs-Say-What-The-Code-Does.md) | S | - | Every sentence of the user-facing documents - the READMEs, doc/ and the unreleased changelog entries - is borne out by the code on main; a sentence the code contradicts is fixed, and code that is wrong is filed as a bug of its own. |
 | <a id="ec01"></a>[EC01](EC01-A-Spike-Of-The-Model-Builder-In-A-Native-Image.md) | S | - | Whether MIMA serves the Maven adapter as a native image, by measurement: it does, and the bare model builder is proposed instead. |
 | <a id="ec28"></a>[EC28](EC28-A-Workflows-Settings-File-Is-Found-Where-Its-Step-Runs.md) | S | - | What the reading of the shell form left over: a step's working directory, a folded block, a heredoc, a block of another key, a substitution too deep, and the notes on links and the limit of files. |
 | <a id="ec08"></a>[EC08](EC08-The-Maven-Adapter-Published-As-A-Recommended-Package.md) | M | - | The Maven adapter published as a package of its own that Porelo's package recommends: installed by default, and it can be left out or removed. |
