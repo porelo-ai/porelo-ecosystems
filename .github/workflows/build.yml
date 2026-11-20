@@ -41,6 +41,7 @@ jobs:
                   fetch-depth: 0
 
             - name: The pinned GraalVM
+              id: pinned-jdk
               uses: ./.github/actions/pinned-jdk
 
             # check-package-version reads the built .rpm with rpm, which the runner is not promised to have, and the
@@ -312,3 +313,9 @@ jobs:
                   done
                   echo "::error::$deb or $rpm is uploaded but not indexed after 20 reads"
                   exit 1
+
+            # Even after a failure, so what the job fetched is not asked of Central again.
+            - if: always()
+              uses: ./.github/actions/maven-cache-save
+              with:
+                  key: ${{ steps.pinned-jdk.outputs.maven-cache-key }}

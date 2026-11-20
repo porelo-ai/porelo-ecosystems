@@ -5,7 +5,7 @@
   "$schema": "issue-1.json",
   "id": "EC31",
   "title": "The Build's Maven Cache Follows What It Resolves",
-  "state": "Implementing",
+  "state": "Review",
   "size": "XS",
   "priority": "High",
   "rank": 1,
