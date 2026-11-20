@@ -5,16 +5,17 @@
   "$schema": "issue-1.json",
   "id": "EC31",
   "title": "The Build's Maven Cache Follows What It Resolves",
-  "state": "Backlog",
-  "size": "S",
+  "state": "Implementing",
+  "size": "XS",
   "priority": "High",
   "rank": 1,
   "blockedBy": [],
-  "covers": "The CI's Maven cache is saved again whenever a Build resolves something new, so no Build fetches from Central what an earlier Build already fetched, and no version range is resolved online on every Build."
+  "covers": "The CI's Maven cache is saved again whenever a Build fetched something new, so no Build fetches from Central what an earlier Build already fetched."
 }
 ```
 
-**Why this size.** One composite action of the CI and the pom's dependency management; no code and no contract.
+**Why this size.** The shared form of the Maven cache, copied into one composite action, one new action and three
+workflows; no code and no contract.
 
 **What must be true.** A Build whose poms did not change fetches nothing it fetched before: the cache it restores holds
 what the last Build resolved, also when the parent, an imported BOM or a snapshot moved without any pom here changing.
@@ -28,23 +29,21 @@ what the last Build resolved, also when the parent, an imported BOM or a snapsho
   Build: the scheduled check after the API snapshot moved fetched its `.pom` and `.jar` from the snapshot repository,
   and each Build fetches the metadata of `bcprov-jdk18on` and `bcutil-jdk18on` from Central, the mark of a version
   range.
-- **The cache:** split it into `actions/cache/restore` with the restore key `maven-<os>-` and `actions/cache/save` after
-  the build, under a key made from the repository's content once the build has run (the sorted list of files under the
-  runner's local Maven repository with their sizes, hashed), skipped when that key is the one restored. A Build that
-  fetched nothing saves nothing; one that fetched something saves once.
-- **The range:** find which dependency asks `bcprov-jdk18on` and `bcutil-jdk18on` by a range and pin the version in
-  the root pom's dependency management, so it is resolved from the cache.
+- **The cache, in the shared form:** `pinned-jdk` restores under a key holding the run's id and attempt, with the
+  poms' hash and then the bare prefix as restore keys, and touches a marker; a new `.github/actions/maven-cache-save`
+  saves under that key, with `if: always()`, when a jar or pom changed status after the marker (`find -cnewer`, since
+  Maven dates a downloaded file by the server's Last-Modified). Each of the three workflows has one job, which ends
+  with it.
+- **The range** is gone with the parent: its build tools resolve Bouncy Castle by a fixed version, so nothing is
+  pinned here.
 - **Red first:** the scheduled check on `main` as it is logs `Downloaded from` for an artifact an earlier Build already
   fetched.
 
 ## Acceptance
 
-- Two Builds of the same commit in a row: the second logs no `Downloaded from` and saves no cache.
+- Two Builds of the same commit in a row: the second downloads no jar or pom and saves no cache; `-U` still asks the
+  snapshots' metadata, on purpose.
 - After a snapshot or the parent moves, the next Build fetches it and saves the cache once; the one after fetches
   nothing.
-- No Build logs `Downloaded from` for `maven-metadata.xml` of a pinned release.
-
-## To be checked
-
-- Which dependency brings the `bcprov-jdk18on` and `bcutil-jdk18on` range, and whether the pin belongs here or in the
-  parent.
+- The first Build after the change logs "fetched after the restore" and saves; the next logs "nothing fetched after
+  the restore: nothing saved".

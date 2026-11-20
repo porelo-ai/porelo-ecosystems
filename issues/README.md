@@ -32,8 +32,13 @@ out.
 
 | # | Size | Blocked by | What it covers |
 |---|---|---|---|
-| <a id="ec31"></a>[EC31](EC31-The-Builds-Maven-Cache-Follows-What-It-Resolves.md) | S | - | The CI's Maven cache is saved again whenever a Build resolves something new, so no Build fetches from Central what an earlier Build already fetched, and no version range is resolved online on every Build. |
 | <a id="ec29"></a>[EC29](EC29-A-Workflows-Settings-File-Is-Found-In-Rarer-Forms.md) | S | - | What the reading of the step's directory left over: forms where the adapter now takes no file though the build names one, and a line number inside a folded block. |
+
+## Implementing
+
+| # | Size | Blocked by | What it covers |
+|---|---|---|---|
+| <a id="ec31"></a>[EC31](EC31-The-Builds-Maven-Cache-Follows-What-It-Resolves.md) | XS | - | The CI's Maven cache is saved again whenever a Build fetched something new, so no Build fetches from Central what an earlier Build already fetched. |
 
 ## Review
 
