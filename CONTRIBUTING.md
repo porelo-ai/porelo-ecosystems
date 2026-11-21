@@ -6,9 +6,9 @@ rules are kept there and in the shared block of [`AGENTS.md`](AGENTS.md), not he
 
 ## In this repository
 
-A change starts as an issue in [`issues/`](issues/README.md), or in
-[porelo-project's issues](https://github.com/porelo-ai/porelo-project/blob/main/issues/README.md) while it is not yet
-clear which repository builds it.
+A change starts as an issue in the repository's [GitHub Issues](https://github.com/porelo-ai/porelo-ecosystems/issues),
+or in [porelo-project's](https://github.com/porelo-ai/porelo-project/issues) while it is not yet clear which repository
+builds it.
 
 A change is checked as the Build checks it, with Java 25 and Maven only. The build, the unit tests and the shared checks
 (`check-actions`, `check-shared`, `check-citations`, `check-readmes`) run in one call:
