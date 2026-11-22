@@ -2476,7 +2476,9 @@ class MavenEcosystemTest {
                     "      - run: |\n          echo \"<<EOF\"\n          mvn -s settings.xml verify",
                     "      - run: |\n          echo $((1<<2))\n          mvn -s settings.xml verify",
                     "      - run: |\n          cat <<<x\n          mvn -s settings.xml verify",
-                    "      - run: mvnd -s settings.xml verify"
+                    "      - run: mvnd -s settings.xml verify",
+                    "      - run: mvn -ssettings.xml verify",
+                    "      - run: ./mvnw -B -ssettings.xml verify"
                 })
         void aSettingsFileIsFoundInTheFormsAShellReads(String run) throws IOException {
             workflow("build.yml", "jobs:\n  build:\n    steps:\n" + run + "\n");
@@ -2502,7 +2504,13 @@ class MavenEcosystemTest {
                             + "          mvn -s settings.xml verify",
                     "      - run: cd sub || exit 1; mvn -s settings.xml verify",
                     "      - run: pushd a; popd; pushd sub; mvn -s settings.xml verify",
-                    "      - working-directory: sub\n        run: cd ../sub && mvn -s settings.xml"
+                    "      - working-directory: sub\n        run: cd ../sub && mvn -s settings.xml",
+                    "      - run: set -e; true && cd sub; mvn -s settings.xml verify",
+                    "      - run: |\n          (cd sub\n          mvn -s settings.xml verify\n          )",
+                    "      - run: |\n          (\n          cd a\n          )\n          cd sub\n"
+                            + "          mvn -s settings.xml verify",
+                    "      - shell: pwsh\n        run: |\n          <# set up #>\n          cd sub\n"
+                            + "          <# build #>\n          mvn -s settings.xml verify"
                 })
         void aSettingsFileIsReadWhereTheStepRuns(String step) throws IOException {
             f.pom("sub/settings.xml", CHECKED_IN).pom("a/settings.xml", CHECKED_IN);
@@ -2581,7 +2589,9 @@ class MavenEcosystemTest {
                     "      - run: echo `cd sub` && mvn -s settings.xml verify",
                     "      - run: sh -c 'cd sub' && mvn -s settings.xml verify",
                     "      - run: V=$(mvn -s settings.xml help:evaluate) && cd sub",
-                    "      - run: pushd sub; popd; mvn -s settings.xml verify"
+                    "      - run: pushd sub; popd; mvn -s settings.xml verify",
+                    "      - run: |\n          (\n          cd sub\n          echo x\n          )\n"
+                            + "          mvn -s settings.xml verify"
                 })
         void aDirectoryLeftForOneCommandIsNotTheBuilds(String step) throws IOException {
             f.pom("sub/settings.xml", CHECKED_IN);
@@ -2600,16 +2610,172 @@ class MavenEcosystemTest {
         @CsvSource(
                 delimiter = '|',
                 value = {
-                    "- run: >~          echo start~~          mvn -s settings.xml~ | 5",
+                    "- run: >~          echo start~~          mvn -s settings.xml~ | 7",
                     "- run: ^echo start\\nmvn -s settings.xml^ | 4",
-                    "- run: echo start &&~          mvn -s settings.xml~ | 4"
+                    "- run: echo start &&~          mvn -s settings.xml~ | 5",
+                    "- run: ^echo start &&~          mvn -s settings.xml^ | 5",
+                    "- run: %echo start &&~~          mvn -s settings.xml% | 6",
+                    "- run: >-~          mvn -B~          -s~          settings.xml verify~ | 7",
+                    "- run: ^echo \\u00e9 \\~          && mvn -s settings.xml^ | 5"
                 })
-        void aFileOutsideALiteralBlockIsAtTheValuesLine(String step, int line) throws IOException {
-            workflow("build.yml", "      " + step.replace("~", "\n").replace("^", "\"") + "\n");
+        void aFileInAFoldedOrQuotedValueIsAtItsOwnLine(String step, int line) throws IOException {
+            workflow(
+                    "build.yml",
+                    "      " + step.replace("~", "\n").replace("^", "\"").replace("%", "'") + "\n");
 
             assertThat(only("extension.ownSettings").line())
                     .as("the line of %s", step)
                     .isEqualTo(line);
+        }
+
+        /**
+         * Harm prevented: a step another shell runs is read as a POSIX shell, and its file is
+         * missed or one it never passes is taken.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - shell: pwsh\n        run: mvn -s .\\build\\settings.xml verify",
+                    "      - shell: powershell\n        run: cd .\\build; .\\mvnw.cmd -s settings.xml",
+                    "      - shell: pwsh\n        run: mvn -s 'build\\settings.xml' \"-Dx=`\"a`\"\"",
+                    "      - shell: pwsh\n        run: '& .\\mvnw.cmd -B -s \"build\\settings.xml\"'",
+                    "      - shell: cmd\n        run: mvn -s build\\settings.xml verify",
+                    "      - shell: cmd\n        run: cd /d build && mvnw.cmd -s settings.xml verify",
+                    "      - shell: cmd\n        run: call mvn -s \"build\\settings.xml\" verify",
+                    "jobs:\n  build:\n    defaults:\n      run:\n        shell: pwsh\n    steps:\n"
+                            + "      - run: mvn -s build\\settings.xml verify"
+                })
+        void aSettingsFileIsReadWithTheStepsShell(String step) throws IOException {
+            f.pom("build/settings.xml", CHECKED_IN);
+            workflow("build.yml", step + "\n");
+
+            assertThat(only("extension.ownSettings").value())
+                    .as("as the shell of %s reads it", step)
+                    .isEqualTo("build/settings.xml");
+        }
+
+        /**
+         * Harm prevented: a cd a Windows shell runs, written without a space or inside a block, is
+         * taken as surely run or not run at all, and the file of the wrong directory is taken.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - shell: cmd\n        working-directory: sub\n        run: |\n"
+                            + "          cd..\n          mvn -s settings.xml verify",
+                    "      - shell: cmd\n        working-directory: sub\n        run: |\n"
+                            + "          cd\\\n          mvn -s settings.xml verify",
+                    "      - shell: cmd\n        working-directory: sub\n        run: |\n"
+                            + "          cd/d ..\n          mvn -s settings.xml verify",
+                    "      - shell: pwsh\n        working-directory: sub\n        run: |\n"
+                            + "          cd..\n          mvn -s settings.xml verify",
+                    "      - shell: pwsh\n        run: |\n          foreach ($d in $dirs) {\n"
+                            + "          cd sub\n          }\n          mvn -s settings.xml verify",
+                    "      - shell: pwsh\n        run: |\n          function f {\n"
+                            + "          cd sub\n          }\n          mvn -s settings.xml verify",
+                    "      - shell: pwsh\n        run: |\n          try {\n"
+                            + "          cd sub\n          } catch {}\n          mvn -s settings.xml verify"
+                })
+        void aWindowsCdTheReadingCannotBeSureOfIsNotTheBuilds(String step) throws IOException {
+            f.pom("sub/settings.xml", CHECKED_IN);
+            workflow("build.yml", step + "\n");
+
+            assertThat(detect().findings())
+                    .as("the file of sub is not the build's in %s", step)
+                    .noneMatch(
+                            x ->
+                                    x.key().equals("extension.ownSettings")
+                                            && x.value().equals("sub/settings.xml"));
+        }
+
+        /** Harm prevented: a long line of a Windows shell stops the answer for minutes or more. */
+        @ParameterizedTest
+        @CsvSource(
+                delimiter = '|',
+                quoteCharacter = '"',
+                value = {"cmd | &", "pwsh | @'x"})
+        void aLongLineOfAWindowsShellIsReadQuickly(String shell, String piece) throws IOException {
+            workflow(
+                    "build.yml",
+                    "      - shell: "
+                            + shell
+                            + "\n        run: |\n          "
+                            + piece.repeat(900_000 / piece.length())
+                            + "\n");
+
+            Detection detection =
+                    org.junit.jupiter.api.Assertions.assertTimeoutPreemptively(
+                            java.time.Duration.ofSeconds(5), () -> detect(), "read in time");
+
+            assertThat(detection.findings())
+                    .as("no file in a line naming none")
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+        }
+
+        /**
+         * Harm prevented: a script another language runs is read as shell, and a line it never runs
+         * takes the generated settings away.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - shell: python\n        run: |\n          \"\"\"\n"
+                            + "          mvn -s settings.xml verify\n          \"\"\"",
+                    "      - shell: node {0}\n        run: |\n          /*\n"
+                            + "          mvn -s settings.xml verify\n          */",
+                    "      - shell: pwsh\n        run: |\n          $notes = @'\n"
+                            + "          mvn -s settings.xml verify\n          '@",
+                    "      - shell: pwsh\n        run: |\n          <#\n"
+                            + "          mvn -s settings.xml verify\n          #>"
+                })
+        void aScriptNoShellReadsIsNotTheBuilds(String step) throws IOException {
+            workflow("build.yml", step + "\n");
+
+            assertThat(detect().findings())
+                    .as("not the build's in %s", step)
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+        }
+
+        // A job that checks the repository out into src, before the step given.
+        private static final String CHECKOUT_INTO_SRC =
+                STEPS + "      - uses: actions/checkout@v4\n        with:\n          path: src\n";
+
+        /**
+         * Harm prevented: a checkout into a directory of the workspace is taken for the workspace,
+         * and the build's file is missed.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - working-directory: src\n        run: mvn -s settings.xml verify",
+                    "      - run: mvn -s src/settings.xml verify",
+                    "      - run: cd src && mvn -s settings.xml verify"
+                })
+        void aCheckoutIntoAPathMovesTheCheckoutsRoot(String step) throws IOException {
+            workflow("build.yml", CHECKOUT_INTO_SRC + step + "\n");
+
+            assertThat(only("extension.ownSettings").value())
+                    .as("the checkout's root for %s", step)
+                    .isEqualTo("settings.xml");
+        }
+
+        /**
+         * Harm prevented: a file of the workspace beside a checkout moved into a directory is taken
+         * for the checkout's.
+         */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "      - run: mvn -s settings.xml verify",
+                    "      - uses: actions/checkout@v4\n        with:\n          path: ${{ inputs.d }}\n"
+                            + "      - run: mvn -s settings.xml verify"
+                })
+        void aFileOutsideAMovedCheckoutIsNotTaken(String step) throws IOException {
+            workflow("build.yml", CHECKOUT_INTO_SRC + step + "\n");
+
+            assertThat(detect().findings())
+                    .as("outside the checkout for %s", step)
+                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
         }
 
         /** Harm prevented: one script named by an alias is read, and named, once per alias. */

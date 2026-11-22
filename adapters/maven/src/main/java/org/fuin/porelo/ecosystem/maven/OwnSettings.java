@@ -14,8 +14,10 @@ import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Pattern;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.shared.Answers;
 import org.fuin.porelo.ecosystem.shared.Origin;
@@ -26,6 +28,7 @@ import org.yaml.snakeyaml.DumperOptions.ScalarStyle;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
+import org.yaml.snakeyaml.error.Mark;
 import org.yaml.snakeyaml.error.YAMLException;
 import org.yaml.snakeyaml.nodes.MappingNode;
 import org.yaml.snakeyaml.nodes.Node;
@@ -36,14 +39,16 @@ import org.yaml.snakeyaml.nodes.SequenceNode;
 /**
  * A settings file inside the checkout that the checkout's own build uses: named by {@code -s} in
  * {@code .mvn/maven.config}, or passed with {@code -s} to Maven in a step of a workflow of the
- * checkout, read from the directory the step runs in. The task's Maven then reads it alone, and no
- * settings file is generated for the task.
+ * checkout, read with the step's shell from the directory it runs in and the path the checkout lies
+ * at. The task's Maven then reads it alone, and no settings file is generated for the task.
  */
 final class OwnSettings {
     static final String KEY = "extension.ownSettings";
     private static final String WORKFLOWS = ".github/workflows";
     private static final int MAX_BYTES = 1024 * 1024;
     private static final int MAX_WORKFLOWS = 64;
+    private static final Pattern OWN_REPOSITORY =
+            Pattern.compile("\\$\\{\\{\\s*github\\.repository\\s*\\}\\}");
     private static final String NOTE =
             "the build uses the settings file checked in here, so Porelo generates none for the"
                     + " task";
@@ -129,16 +134,25 @@ final class OwnSettings {
                 notes.add(note("this workflow is no YAML GitHub reads" + NOT_FOLLOWED, file));
                 return;
             }
+            WorkflowText source = new WorkflowText(text.get());
             // As GitHub reads it: a job's default replaces the workflow's, a step's own replaces
-            // both, and each is relative to the checkout's root.
+            // both, and each is relative to where the job's steps start.
             @Nullable Node workflowDefault = defaultDirectory(root);
+            @Nullable Node workflowShell = defaultShell(root);
             Set<Node> read = Collections.newSetFromMap(new IdentityHashMap<>());
             for (Node job : values(get(root, "jobs"))) {
                 @Nullable Node jobDefault = defaultDirectory(job);
+                @Nullable Node jobShell = defaultShell(job);
                 if (!(get(job, "steps") instanceof SequenceNode steps)) {
                     continue;
                 }
+                // Where the checkout lies under where the steps start; null where not known.
+                @Nullable String checkoutAt = "";
                 for (Node step : steps.getValue()) {
+                    if (ownCheckout(step)) {
+                        checkoutAt =
+                                ShellCommand.directory(scalar(get(get(step, "with"), "path")), "");
+                    }
                     // A script an alias names again is the same script, read once.
                     if (get(step, "run") instanceof ScalarNode run && read.add(run)) {
                         @Nullable Node own = get(step, "working-directory");
@@ -146,38 +160,59 @@ final class OwnSettings {
                                 own != null
                                         ? own
                                         : jobDefault != null ? jobDefault : workflowDefault;
-                        step(file, run, ShellCommand.directory(scalar(written), ""));
+                        @Nullable Node shell = first(get(step, "shell"), jobShell, workflowShell);
+                        Optional<ShellCommand.Shell> kind =
+                                ShellCommand.Shell.named(
+                                        shell == null
+                                                ? null
+                                                : Objects.requireNonNullElse(scalar(shell), ""));
+                        if (kind.isPresent()) {
+                            ShellCommand reader =
+                                    new ShellCommand(
+                                            ShellCommand.directory(scalar(written), ""),
+                                            kind.get());
+                            step(file, source, run, reader, checkoutAt);
+                        }
                     }
                 }
             }
         }
 
-        // The lines of a step's script, from the directory it runs in. Only a literal block keeps
-        // the lines of the file; any other value is placed at its first line.
-        private void step(String file, ScalarNode run, @Nullable String directory) {
-            int start = run.getStartMark().getLine() + 1;
-            boolean literal = run.getScalarStyle() == ScalarStyle.LITERAL;
-            int block = run.getScalarStyle() == ScalarStyle.FOLDED ? start + 1 : start;
-            ShellCommand shell = new ShellCommand(directory);
+        // The lines of a step's script, each file placed at the line of the word that names it.
+        private void step(
+                String file,
+                WorkflowText source,
+                ScalarNode run,
+                ShellCommand shell,
+                @Nullable String checkoutAt) {
+            int[] at = source.lines(run);
             String[] lines = run.getValue().split("\n", -1);
+            int[] starts = new int[lines.length];
+            for (int k = 1; k < lines.length; k++) {
+                starts[k] = starts[k - 1] + lines[k - 1].length() + 1;
+            }
             StringBuilder current = new StringBuilder();
-            int first = 0;
+            // Where each line joined into the current one starts, in it and in the value.
+            List<int[]> joined = new ArrayList<>();
             for (int i = 0; i < lines.length; i++) {
-                String text = ShellCommand.withoutComment(lines[i]);
-                if (current.isEmpty()) {
-                    first = i;
-                }
-                // A line ending in '\' is joined with the next, as the shell joins them.
-                if (text.endsWith("\\") && i + 1 < lines.length) {
+                String text = shell.withoutComment(lines[i]);
+                joined.add(new int[] {current.length(), starts[i]});
+                // A line ending in the shell's escape is joined with the next, as the shell does.
+                if (shell.continues(text) && i + 1 < lines.length) {
                     current.append(text, 0, text.length() - 1).append(' ');
                     continue;
                 }
                 current.append(text);
-                int number = literal ? start + 1 + first : block;
-                Place place = new Place(file, number, Origin.CHECKOUT);
+                Place place = new Place(file, at[joined.get(0)[1]], Origin.CHECKOUT);
+                Optional<ShellCommand.Named> named = shell.settingsFile(current.toString());
                 Optional<String> path =
-                        shell.settingsFile(current.toString()).flatMap(p -> inside(checkout, p));
+                        named.flatMap(n -> inCheckout(n.file(), checkoutAt))
+                                .flatMap(p -> inside(checkout, p));
+                if (named.isPresent()) {
+                    place = new Place(file, at[offset(joined, named.get().at())], Origin.CHECKOUT);
+                }
                 current.setLength(0);
+                joined.clear();
                 // A heredoc's lines are its input, no commands.
                 for (ShellCommand.Heredoc heredoc : shell.heredocs()) {
                     while (++i < lines.length && !heredoc.endsAt(lines[i])) {
@@ -223,6 +258,125 @@ final class OwnSettings {
     // The working directory under defaults.run.
     private static @Nullable Node defaultDirectory(@Nullable Node node) {
         return get(get(get(node, "defaults"), "run"), "working-directory");
+    }
+
+    // The shell under defaults.run.
+    private static @Nullable Node defaultShell(@Nullable Node node) {
+        return get(get(get(node, "defaults"), "run"), "shell");
+    }
+
+    private static @Nullable Node first(@Nullable Node... nodes) {
+        for (@Nullable Node node : nodes) {
+            if (node != null) {
+                return node;
+            }
+        }
+        return null;
+    }
+
+    // A step that checks out the workflow's own repository, which moves where its files lie.
+    private static boolean ownCheckout(Node step) {
+        @Nullable String uses = scalar(get(step, "uses"));
+        if (uses == null || !uses.toLowerCase(Locale.ROOT).startsWith("actions/checkout@")) {
+            return false;
+        }
+        @Nullable Node repository = get(get(step, "with"), "repository");
+        return repository == null
+                || OWN_REPOSITORY
+                        .matcher(Objects.requireNonNullElse(scalar(repository), ""))
+                        .matches();
+    }
+
+    // A file named from where the steps start, as a path of the checkout lying at checkoutAt.
+    private static Optional<String> inCheckout(String file, @Nullable String checkoutAt) {
+        if (checkoutAt == null || !staysInside(file)) {
+            return Optional.empty();
+        }
+        String normal = Path.of(file).normalize().toString();
+        if (checkoutAt.isEmpty()) {
+            return Optional.of(normal);
+        }
+        return normal.startsWith(checkoutAt + "/")
+                ? Optional.of(normal.substring(checkoutAt.length() + 1))
+                : Optional.empty();
+    }
+
+    // Where in the value a place in a logical line stands, by the lines joined into it.
+    private static int offset(List<int[]> joined, int at) {
+        int[] line = joined.get(0);
+        for (int[] each : joined) {
+            if (each[0] <= at) {
+                line = each;
+            }
+        }
+        return line[1] + Math.max(0, at - line[0]);
+    }
+
+    // A workflow's text, to place a character of a value at the line it stands on.
+    private static final class WorkflowText {
+        private final String text;
+        private final int[] lineStarts;
+
+        WorkflowText(String text) {
+            this.text = text;
+            List<Integer> starts = new ArrayList<>(List.of(0));
+            for (int i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) {
+                starts.add(i + 1);
+            }
+            lineStarts = starts.stream().mapToInt(Integer::intValue).toArray();
+        }
+
+        // The line, from 1, of each character of the value and of its end. The value's
+        // characters stand in the text in order; what lies between them is indentation, a line
+        // break folded away, a quote or the rest of an escape.
+        int[] lines(ScalarNode node) {
+            String value = node.getValue();
+            int[] lines = new int[value.length() + 1];
+            int line = node.getStartMark().getLine();
+            int at = offset(node.getStartMark());
+            int end = Math.max(at, offset(node.getEndMark()));
+            ScalarStyle style = node.getScalarStyle();
+            if (style == ScalarStyle.LITERAL || style == ScalarStyle.FOLDED) {
+                int header = text.indexOf('\n', at);
+                at = header < 0 ? end : header + 1;
+                line++;
+            } else if (style == ScalarStyle.SINGLE_QUOTED || style == ScalarStyle.DOUBLE_QUOTED) {
+                at++;
+            }
+            for (int v = 0; v < value.length(); v++) {
+                char c = value.charAt(v);
+                lines[v] = line + 1;
+                while (at < end) {
+                    char s = text.charAt(at);
+                    lines[v] = line + 1;
+                    if (style == ScalarStyle.DOUBLE_QUOTED && s == '\\' && at + 1 < end) {
+                        char escaped = text.charAt(at + 1);
+                        at += escaped == 'x' ? 4 : escaped == 'u' ? 6 : escaped == 'U' ? 10 : 2;
+                        if (escaped != '\n') {
+                            break;
+                        }
+                        // An escaped line break stands for nothing in the value.
+                        line++;
+                        continue;
+                    }
+                    line += s == '\n' ? 1 : 0;
+                    at++;
+                    if (s == c || (Character.isWhitespace(c) && Character.isWhitespace(s))) {
+                        break;
+                    }
+                }
+            }
+            lines[value.length()] = line + 1;
+            return lines;
+        }
+
+        private int offset(Mark mark) {
+            int line = Math.min(mark.getLine(), lineStarts.length - 1);
+            int start = lineStarts[line];
+            int next = line + 1 < lineStarts.length ? lineStarts[line + 1] : text.length();
+            int columns = Math.min(mark.getColumn(), text.codePointCount(start, next));
+            return Math.min(text.offsetByCodePoints(start, columns), text.length());
+        }
     }
 
     private static @Nullable Node get(@Nullable Node node, String key) {
