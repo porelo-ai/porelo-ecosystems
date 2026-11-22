@@ -2,6 +2,7 @@ package org.fuin.porelo.ecosystem.maven;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.fuin.porelo.ecosystem.maven.Fixture.project;
 import static org.fuin.porelo.ecosystem.maven.Fixture.properties;
 import static org.fuin.porelo.ecosystem.maven.Fixture.repository;
@@ -1633,6 +1634,10 @@ class MavenEcosystemTest {
 
             assertThat(central.origin()).isEqualTo(Finding.Origin.MACHINE);
             assertThat(central.file()).as("the contract's way of saying no file").isEmpty();
+            assertThat(central.line()).as("no file, so no line").isZero();
+            assertThat(central.note())
+                    .as("nobody moved it, so it is Maven's own")
+                    .contains("Maven's built-in");
         }
 
         /**
@@ -1648,15 +1653,92 @@ class MavenEcosystemTest {
                             "<properties><maven.repo.central>https://corp.example.org/m2"
                                     + "</maven.repo.central></properties>"));
 
-            assertThat(detect().findings())
+            List<Finding> moved =
+                    detect().findings().stream()
+                            .filter(x -> x.key().equals("host.corp.example.org"))
+                            .toList();
+
+            assertThat(moved)
                     .as("the moved Central, as a repository and a plugin repository")
-                    .filteredOn(x -> x.key().equals("host.corp.example.org"))
                     .hasSize(2)
                     .allSatisfy(
                             x ->
                                     assertThat(x.note())
                                             .as("not Maven's default")
                                             .doesNotContain("built-in"));
+            assertThat(moved)
+                    .as("the pom that moved it, at the property's line")
+                    .extracting(Finding::file, Finding::line, Finding::origin)
+                    .containsOnly(tuple("pom.xml", 7, Finding.Origin.CHECKOUT));
+        }
+
+        /**
+         * Harm prevented: a host the checkout or the person chose is shown without the file that
+         * chose it. The sources and their order are the ones real Maven was seen to take: what
+         * Maven is given, then the person's active settings profile over the pom, then the JVM's.
+         */
+        @ParameterizedTest(name = "{0}")
+        @CsvSource({
+            "maven.config alone,         0, 1, 0, 0, config.example.org,   .mvn/maven.config, 1, CHECKOUT",
+            "a settings profile alone,   0, 0, 1, 0, settings.example.org, .m2/settings.xml,  6, YOURS",
+            "jvm.config alone,           0, 0, 0, 1, jvm.example.org,      .mvn/jvm.config,   1, CHECKOUT",
+            "maven.config over the pom,  1, 1, 0, 0, config.example.org,   .mvn/maven.config, 1, CHECKOUT",
+            "the settings over the pom,  1, 0, 1, 0, settings.example.org, .m2/settings.xml,  6, YOURS",
+            "the pom over jvm.config,    1, 0, 0, 1, pom.example.org,      pom.xml,           7, CHECKOUT",
+            "maven.config over all,      1, 1, 1, 1, config.example.org,   .mvn/maven.config, 1, CHECKOUT"
+        })
+        void aMovedCentralNamesTheFileWhoseValueMavenTakes(
+                String name,
+                int inPom,
+                int inMavenConfig,
+                int inSettings,
+                int inJvmConfig,
+                String host,
+                String file,
+                int line,
+                Finding.Origin origin)
+                throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            inPom == 1
+                                    ? properties("maven.repo.central", "https://pom.example.org/m")
+                                    : ""));
+            if (inMavenConfig == 1) {
+                f.pom(".mvn/maven.config", "-Dmaven.repo.central=https://config.example.org/m\n");
+            }
+            if (inJvmConfig == 1) {
+                f.pom(".mvn/jvm.config", "-Xmx1g -Dmaven.repo.central=https://jvm.example.org/m\n");
+            }
+            if (inSettings == 1) {
+                f.settings(
+                        """
+                        <settings>
+                          <profiles>
+                            <profile>
+                              <id>corp</id>
+                              <properties>
+                                <maven.repo.central>https://settings.example.org/m</maven.repo.central>
+                              </properties>
+                            </profile>
+                          </profiles>
+                          <activeProfiles><activeProfile>corp</activeProfile></activeProfiles>
+                        </settings>
+                        """);
+            }
+
+            List<Finding> moved =
+                    detect().findings().stream()
+                            .filter(x -> x.key().equals("host." + host))
+                            .toList();
+
+            assertThat(moved)
+                    .as(
+                            "%s: the repository and the plugin repository, where the value is set",
+                            name)
+                    .extracting(Finding::file, Finding::line, Finding::origin)
+                    .containsExactly(tuple(file, line, origin), tuple(file, line, origin));
         }
 
         @Test

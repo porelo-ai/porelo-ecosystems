@@ -417,9 +417,10 @@ public final class RepositoryHosts {
         Model model = result.getEffectiveModel();
         answerProblems(result, pom);
         answerExtensions(model, result);
-        model.getRepositories().forEach(r -> answerRepository(r, RepositoryHost.Kind.REPOSITORY));
+        model.getRepositories()
+                .forEach(r -> answerRepository(r, RepositoryHost.Kind.REPOSITORY, model));
         model.getPluginRepositories()
-                .forEach(r -> answerRepository(r, RepositoryHost.Kind.PLUGIN_REPOSITORY));
+                .forEach(r -> answerRepository(r, RepositoryHost.Kind.PLUGIN_REPOSITORY, model));
         result.getModelIds().forEach(id -> answerConditionalProfiles(result, id));
     }
 
@@ -439,13 +440,15 @@ public final class RepositoryHosts {
         }
     }
 
-    private void answerRepository(Repository repository, RepositoryHost.Kind kind) {
+    private void answerRepository(Repository repository, RepositoryHost.Kind kind, Model model) {
         // Maven asks such a repository for nothing.
         if (isOff(repository.getReleases()) && isOff(repository.getSnapshots())) {
             return;
         }
         InputLocation at = repository.getLocation("url");
-        Place place = places.of(at != null ? at : repository.getLocation(""));
+        Place written = places.of(at != null ? at : repository.getLocation(""));
+        // Only the super POM has no file, and its Central takes its URL from this property.
+        Place place = written.file().isEmpty() ? movedCentral(model).orElse(written) : written;
         String url = repository.getUrl() == null ? "" : repository.getUrl();
         String id = repository.getId();
         if (id == null) {
@@ -477,6 +480,21 @@ public final class RepositoryHosts {
                                                 kind,
                                                 place,
                                                 server(id, place))));
+    }
+
+    // Maven's order: what Maven is given, then the model with the settings' profiles, then the JVM.
+    private Optional<Place> movedCentral(Model model) {
+        String name = ModelInterpolator.MAVEN_REPO_CENTRAL_KEY;
+        Optional<Place> given = options.userPlace(name);
+        if (given.isPresent()) {
+            return given;
+        }
+        if (model.getProperties().containsKey(name)) {
+            InputLocation properties = model.getLocation("properties");
+            InputLocation property = properties == null ? null : properties.getLocation(name);
+            return property == null ? Optional.empty() : Optional.of(places.of(property));
+        }
+        return options.systemPlace(name);
     }
 
     private static boolean isOff(@Nullable RepositoryPolicy policy) {

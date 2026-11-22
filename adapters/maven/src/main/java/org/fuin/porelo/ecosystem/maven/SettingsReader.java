@@ -203,7 +203,7 @@ final class SettingsReader {
         if (repository != null && name.equals("enabled") && takePolicy(reader, parent)) {
             return;
         }
-        if (profile != null && takeProfile(reader, name, parent)) {
+        if (profile != null && takeProfile(reader, name, parent, line, column)) {
             return;
         }
         path.push(name);
@@ -304,7 +304,8 @@ final class SettingsReader {
         }
     }
 
-    private boolean takeProfile(XMLStreamReader reader, String name, String parent)
+    private boolean takeProfile(
+            XMLStreamReader reader, String name, String parent, int line, int column)
             throws XMLStreamException {
         ProfileDraft draft = java.util.Objects.requireNonNull(profile);
         if (parent.equals(PROFILE) && name.equals("id")) {
@@ -313,6 +314,7 @@ final class SettingsReader {
         }
         if (parent.equals(PROFILE + "/properties")) {
             draft.properties.put(name, text(reader));
+            draft.property(name, new InputLocation(line, column, source));
             return true;
         }
         String activation = PROFILE + "/activation";
@@ -539,7 +541,17 @@ final class SettingsReader {
         boolean activeByDefault;
         final List<String> conditions = new ArrayList<>();
         final Map<String, String> properties = new LinkedHashMap<>();
+        // The model builder carries these into the pom's model, which names where a value is set.
+        @Nullable InputLocation propertiesLocation;
         final List<RepositoryDraft> repositories = new ArrayList<>();
+
+        void property(String name, InputLocation at) {
+            if (propertiesLocation == null) {
+                propertiesLocation =
+                        new InputLocation(at.getLineNumber(), at.getColumnNumber(), at.getSource());
+            }
+            propertiesLocation.setLocation(name, at);
+        }
 
         Profile toProfile() {
             Profile result = new Profile();
@@ -552,6 +564,7 @@ final class SettingsReader {
                 result.setActivation(activation);
             }
             properties.forEach(result::addProperty);
+            result.setLocation("properties", propertiesLocation);
             for (RepositoryDraft draft : repositories) {
                 if (draft.url == null) {
                     continue;

@@ -6,7 +6,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -45,6 +48,8 @@ final class MavenOptions {
 
     private final Properties user = new Properties();
     private final Properties system = new Properties();
+    private final Map<String, Integer> userLines = new HashMap<>();
+    private final Map<String, Integer> systemLines = new HashMap<>();
     private final List<String> activeProfiles = new ArrayList<>();
     private final List<String> inactiveProfiles = new ArrayList<>();
     private final List<Unplaced> notes = new ArrayList<>();
@@ -107,6 +112,23 @@ final class MavenOptions {
         return new Place(MAVEN_CONFIG, globalSettingsLine, Origin.CHECKOUT);
     }
 
+    /** Where a property given to Maven itself is set; empty when it is not. */
+    Optional<Place> userPlace(String name) {
+        return placeOf(userLines, name, MAVEN_CONFIG);
+    }
+
+    /** Where a property given to its JVM is set; empty when it is not. */
+    Optional<Place> systemPlace(String name) {
+        return placeOf(systemLines, name, JVM_CONFIG);
+    }
+
+    private static Optional<Place> placeOf(Map<String, Integer> lines, String name, String file) {
+        Integer line = lines.get(name);
+        return line == null
+                ? Optional.empty()
+                : Optional.of(new Place(file, line, Origin.CHECKOUT));
+    }
+
     /** A property as Maven's settings see it: what Maven was given comes first. */
     @Nullable String property(String name) {
         String value = user.getProperty(name);
@@ -146,7 +168,7 @@ final class MavenOptions {
             boolean separate = WITH_A_VALUE.contains(argument) && i + 1 < lines.size();
             String value = separate ? lines.get(++i).strip() : "";
             if (argument.equals("-D") || argument.equals("--define")) {
-                define(user, value);
+                define(user, userLines, value, i + 1);
             } else if (argument.equals("-P") || argument.equals("--activate-profiles")) {
                 profiles(value);
             } else if (argument.equals("-s") || argument.equals("--settings")) {
@@ -163,7 +185,7 @@ final class MavenOptions {
                 // The rest of the argument is the value, a space in front of it too.
                 settings(lines.get(i).stripLeading().substring(2), i + 1);
             } else if (argument.startsWith("-D")) {
-                define(user, argument.substring(2));
+                define(user, userLines, argument.substring(2), i + 1);
             } else if (argument.startsWith("-P")) {
                 profiles(argument.substring(2));
             } else if (argument.startsWith("-")
@@ -193,7 +215,7 @@ final class MavenOptions {
     private void jvmLine(String line, int number) {
         for (String token : tokens(line)) {
             if (token.startsWith("-D")) {
-                define(system, token.substring(2));
+                define(system, systemLines, token.substring(2), number);
             } else if (LOADS_CODE.matcher(token).matches()) {
                 notes.add(
                         note(
@@ -215,13 +237,13 @@ final class MavenOptions {
                 : stripped.split("\\s+");
     }
 
-    private static void define(Properties into, String definition) {
+    // The line goes with the value kept: a later definition of the name replaces both.
+    private static void define(
+            Properties into, Map<String, Integer> lines, String definition, int line) {
         int equals = definition.indexOf('=');
-        if (equals < 0) {
-            into.setProperty(definition, "true");
-        } else {
-            into.setProperty(definition.substring(0, equals), definition.substring(equals + 1));
-        }
+        String name = equals < 0 ? definition : definition.substring(0, equals);
+        into.setProperty(name, equals < 0 ? "true" : definition.substring(equals + 1));
+        lines.put(name, line);
     }
 
     private void profiles(String list) {
