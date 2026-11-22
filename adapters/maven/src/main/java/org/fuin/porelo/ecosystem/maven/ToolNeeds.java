@@ -18,6 +18,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.IntPredicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,8 +34,10 @@ import org.apache.maven.model.Profile;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.shared.Answers;
+import org.fuin.porelo.ecosystem.shared.JdkPin;
 import org.fuin.porelo.ecosystem.shared.Origin;
 import org.fuin.porelo.ecosystem.shared.Place;
+import org.fuin.porelo.ecosystem.shared.ToolUnavailable;
 import org.fuin.porelo.ecosystem.shared.UnknownValue;
 import org.fuin.porelo.ecosystem.shared.Unplaced;
 import org.jspecify.annotations.Nullable;
@@ -94,6 +97,8 @@ final class ToolNeeds {
     private final List<Finding> fromFiles = new ArrayList<>();
     private final List<Finding> wrapperPackages = new ArrayList<>();
     private @Nullable Finding shfmt;
+    // Each JDK a pom pins by address and digest, once for each such pair.
+    private final Map<String, Finding> jdkPins = new LinkedHashMap<>();
     private final MachineCondition machineCondition;
     private final List<Unplaced> unplaced = new ArrayList<>();
     private final Set<String> unplacedSeen = new HashSet<>();
@@ -112,6 +117,7 @@ final class ToolNeeds {
         readMaven(model, places);
         readPackages(model, places);
         readShfmt(model, places);
+        readJdkPins(model, places);
         readProfilesLeftOff(model, places);
         readTestMemory(model, places);
     }
@@ -131,7 +137,7 @@ final class ToolNeeds {
     List<Finding> findings(@Nullable UnknownValue unread) {
         boolean everyPomRead = unread == null;
         Place unreadAt = unread == null ? NOTHING_ASKED : unread.place();
-        List<Finding> all = new ArrayList<>();
+        List<Finding> all = new ArrayList<>(jdkPins.values());
         if (nativeBuild != null) {
             all.add(nativeBuild);
         }
@@ -702,6 +708,64 @@ final class ToolNeeds {
                 + " is off unless the build's command turns it on (-P"
                 + profile.getId()
                 + ")";
+    }
+
+    // The model is the effective one: its properties are filled in, a child's over its parent's.
+    private void readJdkPins(Model model, Places places) {
+        for (String name : new TreeSet<>(model.getProperties().stringPropertyNames())) {
+            String url = model.getProperties().getProperty(name).strip();
+            if (!name.endsWith(".url") || !JdkPin.isLinuxJdk(url)) {
+                continue;
+            }
+            String prefix = name.substring(0, name.length() - ".url".length());
+            String digest = model.getProperties().getProperty(prefix + ".sha256", "").strip();
+            if (digest.isEmpty()) {
+                digest = model.getProperties().getProperty(prefix + ".sha512", "").strip();
+            }
+            Place place = propertyPlace(model, name, places);
+            if (digest.isEmpty()) {
+                leftOut(
+                        place,
+                        "a JDK is pinned by the property "
+                                + name
+                                + " without a digest beside it (.sha256 or .sha512), so it is not"
+                                + " taken");
+                continue;
+            }
+            try {
+                JdkPin pin = JdkPin.of(url, digest);
+                String value = pin.download().url() + " " + pin.download().digest();
+                if (jdkPins.containsKey(value)) {
+                    continue;
+                }
+                // Two modules may pin two JDKs under one name.
+                Set<String> used = new HashSet<>();
+                jdkPins.values().forEach(f -> used.add(f.key()));
+                String key = "jdk.pin." + prefix;
+                for (int n = 2; used.contains(key); n++) {
+                    key = "jdk.pin." + prefix + "." + n;
+                }
+                jdkPins.put(
+                        value,
+                        Answers.tool(
+                                key,
+                                value,
+                                place,
+                                pin.vendor()
+                                        + " "
+                                        + pin.download().version()
+                                        + ", the JDK the properties "
+                                        + name
+                                        + " and its digest pin"));
+            } catch (ToolUnavailable e) {
+                leftOut(
+                        place,
+                        "a JDK is pinned by the property "
+                                + name
+                                + ", which is not taken: "
+                                + e.getMessage());
+            }
+        }
     }
 
     private void leftOut(Place place, String note) {

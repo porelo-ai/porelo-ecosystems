@@ -1,13 +1,16 @@
 package org.fuin.porelo.ecosystem.maven;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.shared.JdkDownloads;
+import org.fuin.porelo.ecosystem.shared.JdkPin;
 import org.fuin.porelo.ecosystem.shared.ShfmtDownloads;
 import org.fuin.porelo.ecosystem.shared.ToolDownload;
 import org.fuin.porelo.ecosystem.shared.ToolLines;
@@ -33,6 +36,12 @@ final class ToolResolver {
 
     // Porelo joins run.<name> in the order of the names: the JDK's lines before GraalVM's.
     private static final String JAVA_LINES = "run.1-java";
+    private static final String PIN = "jdk.pin.";
+    private static final Predicate<Finding> JDK_PACKAGES =
+            f ->
+                    f.key().equals("package.default-jdk-headless")
+                            || (f.key().startsWith("package.openjdk-")
+                                    && f.key().endsWith("-jdk-headless"));
 
     private final JdkDownloads jdks;
     private final MavenDownloads mavens;
@@ -51,13 +60,19 @@ final class ToolResolver {
         boolean noMajor =
                 java.filter(f -> !f.unknown() && !MAJOR.matcher(f.value()).matches()).isPresent();
         int major = noMajor ? NO_JAVA_ASKED : askedJava(findings);
-        if (!noMajor) {
+        boolean plainlyAsked =
+                java.filter(f -> !f.unknown() && MAJOR.matcher(f.value()).matches()).isPresent();
+        Pinned pinned = resolvePins(all, plainlyAsked ? major : 0);
+        if (pinned == Pinned.NONE && !noMajor) {
             resolveJava(all, major);
         }
         if (find(findings, "package.maven").isPresent()) {
             resolveMaven(all);
         }
-        if (find(findings, "graalvm.version").isPresent() && !noMajor && !javaContradicts(all)) {
+        if (find(findings, "graalvm.version").isPresent()
+                && pinned != Pinned.GRAALVM
+                && !noMajor
+                && !javaContradicts(all)) {
             if (find(all, JAVA_LINES).isPresent()) {
                 resolveGraalvm(all, major);
             } else {
@@ -115,12 +130,90 @@ final class ToolResolver {
                 .orElse(NO_JAVA_ASKED);
     }
 
-    private void resolveJava(List<Finding> all, int major) {
-        Predicate<Finding> packages =
+    private enum Pinned {
+        NONE,
+        JDK,
+        GRAALVM,
+        UNSETTLED
+    }
+
+    // The checkout's own pin wins over any vendor's newest, when it builds the release asked.
+    private static Pinned resolvePins(List<Finding> all, int floor) {
+        List<Finding> pins =
+                all.stream().filter(f -> f.key().startsWith(PIN) && !f.unknown()).toList();
+        Map<Finding, JdkPin> fitting = new LinkedHashMap<>();
+        for (Finding pin : pins) {
+            String[] parts = pin.value().split(" ", 2);
+            try {
+                JdkPin read = JdkPin.of(parts[0], parts.length > 1 ? parts[1] : "");
+                if (read.major() >= floor) {
+                    fitting.put(pin, read);
+                } else {
+                    annotate(
+                            all,
+                            pin,
+                            false,
+                            "not taken: Java " + floor + " is asked, which it does not build");
+                }
+            } catch (ToolUnavailable e) {
+                annotate(all, pin, true, "not taken: " + e.getMessage());
+            }
+        }
+        if (fitting.isEmpty()) {
+            return Pinned.NONE;
+        }
+        if (fitting.size() > 1) {
+            fitting.keySet()
+                    .forEach(
+                            pin ->
+                                    annotate(
+                                            all,
+                                            pin,
+                                            true,
+                                            "one of "
+                                                    + fitting.size()
+                                                    + " JDKs the poms pin, and which one the build"
+                                                    + " takes is not read"));
+            return Pinned.UNSETTLED;
+        }
+        Map.Entry<Finding, JdkPin> only = fitting.entrySet().iterator().next();
+        Finding at = only.getKey();
+        JdkPin pin = only.getValue();
+        String where = at.note();
+        all.removeIf(JDK_PACKAGES);
+        all.add(line(at, JAVA_LINES, ToolLines.install("java", pin.download()), where));
+        for (String name : List.of("JAVA_HOME", "JDK_HOME", "JRE_HOME")) {
+            all.add(line(at, "env." + name, "/opt/java", where));
+        }
+        if (pin.vendor().equals("GraalVM")) {
+            all.add(line(at, "env.GRAALVM_HOME", "/opt/java", where));
+            return Pinned.GRAALVM;
+        }
+        return Pinned.JDK;
+    }
+
+    private static void annotate(List<Finding> all, Finding which, boolean unknown, String why) {
+        all.replaceAll(
                 f ->
-                        f.key().equals("package.default-jdk-headless")
-                                || (f.key().startsWith("package.openjdk-")
-                                        && f.key().endsWith("-jdk-headless"));
+                        f.equals(which)
+                                ? new Finding(
+                                        f.part(),
+                                        f.key(),
+                                        unknown ? "" : f.value(),
+                                        f.file(),
+                                        f.line(),
+                                        f.origin(),
+                                        unknown || f.unknown(),
+                                        // An unknown holds no value, so the pin stays in the note.
+                                        f.note()
+                                                + (unknown ? " (" + f.value() + ")" : "")
+                                                + "; "
+                                                + why)
+                                : f);
+    }
+
+    private void resolveJava(List<Finding> all, int major) {
+        Predicate<Finding> packages = JDK_PACKAGES;
         Optional<Finding> anchor = all.stream().filter(packages).findFirst();
         if (anchor.isEmpty() || anchor.get().unknown() && javaContradicts(all)) {
             return;

@@ -108,6 +108,76 @@ class MavenEcosystemTest {
     /** Harm prevented: the image holds another JDK than the one the build compiles for. */
     @Nested
     class TheJdk {
+        private static final String GRAAL =
+                "https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-%s/"
+                        + "graalvm-community-jdk-25i5-25.0.5.0.3_%s";
+
+        /** Harm prevented: the task builds with another JDK than the one the checkout pins. */
+        @Test
+        void aJdkThePomPinsIsNamedWithItsDigest() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                              <properties>
+                                <g.version>25.5.5.0.3</g.version>
+                                <g.url>%s</g.url>
+                                <g.sha256>
+                                  %s
+                                </g.sha256>
+                                <g.windows.url>%s</g.windows.url>
+                                <g.windows.sha256>%s</g.windows.sha256>
+                              </properties>
+                            """
+                                    .formatted(
+                                            GRAAL.formatted("${g.version}", "linux-x64_bin.tar.gz"),
+                                            "C".repeat(64),
+                                            GRAAL.formatted("${g.version}", "windows-x64_bin.zip"),
+                                            "d".repeat(64))));
+
+            Detection detection = detect();
+
+            assertThat(detection.findings())
+                    .as("the address filled in, the digest as sha256sum reads it, one pin only")
+                    .filteredOn(x -> x.key().startsWith("jdk.pin."))
+                    .singleElement()
+                    .satisfies(
+                            pin -> {
+                                assertThat(pin.key()).isEqualTo("jdk.pin.g");
+                                assertThat(pin.value())
+                                        .isEqualTo(
+                                                GRAAL.formatted(
+                                                                "25.5.5.0.3",
+                                                                "linux-x64_bin.tar.gz")
+                                                        + " "
+                                                        + "c".repeat(64));
+                                assertThat(pin.line()).as("the address's line").isPositive();
+                            });
+            assertThat(detection.unplaced()).as("another platform's pin is no JDK here").isEmpty();
+        }
+
+        /** Harm prevented: a pin the adapter cannot take goes unsaid, and another JDK is taken. */
+        @Test
+        void aJdkPinWithoutADigestIsNamed() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            properties(
+                                    "t.url",
+                                    "https://github.com/adoptium/temurin21-binaries/releases/download/"
+                                            + "jdk-21.0.4%2B7/OpenJDK21U-jdk_x64_linux_hotspot_21.0.4_7.tar.gz")));
+
+            Detection detection = detect();
+
+            assertThat(detection.findings()).noneMatch(x -> x.key().startsWith("jdk.pin."));
+            assertThat(detection.unplaced())
+                    .as("named with its property, file and line")
+                    .singleElement()
+                    .satisfies(u -> assertThat(u.note()).contains("t.url").contains("digest"));
+        }
+
         @ParameterizedTest
         @CsvSource({
             "maven.compiler.release, 25, 25",

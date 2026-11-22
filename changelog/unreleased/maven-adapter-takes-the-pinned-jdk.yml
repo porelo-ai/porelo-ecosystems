@@ -1,0 +1,2 @@
+title: The Maven adapter installs the JDK a pom pins by its archive's address and digest (a GraalVM CE or Temurin archive for Linux x64), in place of the vendor's newest; a pin it cannot take is named.
+type: fixed

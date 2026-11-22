@@ -17,7 +17,7 @@ import org.jspecify.annotations.Nullable;
 /** Finds the newest stable JDK of a major, from each JDK's own vendor. */
 public final class JdkDownloads {
     // 25i5-25.0.5.0.3 since GraalVM split its own releases, 25.0.2 before: read in both forms.
-    private static final Pattern GRAALVM_ASSET =
+    static final Pattern GRAALVM_ASSET =
             Pattern.compile(
                     "graalvm-community-jdk-(?:(\\d{1,4})i\\d+-)?((\\d{1,4})(?:\\.[0-9.]*)?)_linux-x64_bin\\.tar\\.gz");
 

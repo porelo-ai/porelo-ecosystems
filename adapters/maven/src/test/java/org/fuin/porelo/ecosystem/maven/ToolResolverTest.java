@@ -467,4 +467,112 @@ class ToolResolverTest {
 
         assertThat(resolver.resolve(asked)).as("what Detect left unknown stays").isEqualTo(asked);
     }
+
+    private static final String PINNED_GRAAL =
+            "https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-25.5.5.0.3/"
+                    + "graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz";
+    private static final String PINNED_TEMURIN_21 =
+            "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/"
+                    + "OpenJDK21U-jdk_x64_linux_hotspot_21.0.4_7.tar.gz";
+    private static final String PINNED_TEMURIN_25 =
+            "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.1%2B8/"
+                    + "OpenJDK25U-jdk_x64_linux_hotspot_25.0.1_8.tar.gz";
+
+    private static Finding pin(String name, String url) {
+        return finding("jdk.pin." + name, url + " " + "c".repeat(64), false);
+    }
+
+    /** Harm prevented: the task builds with another JDK than the one the checkout pins. */
+    @Test
+    void aPinnedGraalvmIsTheJdkAndNoVendorIsAsked() {
+        asked.add(finding("java.version", "25", false));
+        asked.add(finding("package.openjdk-25-jdk-headless", "x", false));
+        asked.add(finding("graalvm.version", "", false));
+        asked.add(pin("g", PINNED_GRAAL));
+        graalvm(25);
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(only(all, "run.1-java").value())
+                .as("the pinned archive, checked against the pinned digest")
+                .contains(PINNED_GRAAL)
+                .contains("c".repeat(64));
+        assertThat(only(all, "env.JAVA_HOME").value()).isEqualTo("/opt/java");
+        assertThat(only(all, "env.GRAALVM_HOME").value())
+                .as("the pinned JDK is the GraalVM")
+                .isEqualTo("/opt/java");
+        assertThat(all)
+                .as("no second GraalVM and no distribution JDK")
+                .noneMatch(f -> f.key().equals("run.2-graalvm"))
+                .noneMatch(f -> f.key().startsWith("package.openjdk-"));
+    }
+
+    @Test
+    void aPinAboveTheAskedReleaseIsTaken() {
+        asked.add(finding("java.version", "17", false));
+        asked.add(finding("package.openjdk-17-jdk-headless", "x", false));
+        asked.add(pin("t", PINNED_TEMURIN_21));
+        temurin(17);
+
+        assertThat(only(resolver.resolve(asked), "run.1-java").value())
+                .as("a JDK builds lower releases")
+                .contains(PINNED_TEMURIN_21);
+    }
+
+    /** Harm prevented: a JDK that cannot build the release asked is installed. */
+    @Test
+    void aPinBelowTheAskedReleaseIsNotTaken() {
+        asked.add(finding("java.version", "25", false));
+        asked.add(finding("package.openjdk-25-jdk-headless", "x", false));
+        asked.add(pin("t", PINNED_TEMURIN_21));
+        temurin(25);
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(only(all, "run.1-java").value()).contains("https://github.com/j25.tgz");
+        assertThat(only(all, "jdk.pin.t").note()).as("said why").contains("Java 25");
+    }
+
+    @Test
+    void aPinIsTakenWhenNoPlainReleaseIsAsked() {
+        asked.add(finding("java.version", "", true));
+        asked.add(finding("package.default-jdk-headless", "", true));
+        asked.add(pin("t", PINNED_TEMURIN_21));
+
+        assertThat(only(resolver.resolve(asked), "run.1-java").value())
+                .as("the pin names the JDK outright")
+                .contains(PINNED_TEMURIN_21);
+    }
+
+    /** Harm prevented: one of two pins is picked as if it were the build's. */
+    @Test
+    void twoPinsLeaveTheJdkUnknown() {
+        asked.add(finding("java.version", "21", false));
+        asked.add(finding("package.openjdk-21-jdk-headless", "x", false));
+        asked.add(pin("a", PINNED_TEMURIN_21));
+        asked.add(pin("b", PINNED_TEMURIN_25));
+        temurin(21);
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(all)
+                .as("neither pin nor the vendor's newest is installed in its stead")
+                .noneMatch(f -> f.key().equals("run.1-java"));
+        assertThat(only(all, "jdk.pin.a").unknown()).isTrue();
+        assertThat(only(all, "jdk.pin.b").unknown()).isTrue();
+    }
+
+    @Test
+    void aTemurinPinBesideANativeBuildKeepsGraalvm() {
+        asked.add(finding("java.version", "25", false));
+        asked.add(finding("package.openjdk-25-jdk-headless", "x", false));
+        asked.add(finding("graalvm.version", "", false));
+        asked.add(pin("t", PINNED_TEMURIN_25));
+        graalvm(25);
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(only(all, "run.1-java").value()).contains(PINNED_TEMURIN_25);
+        assertThat(all).anyMatch(f -> f.key().equals("run.2-graalvm"));
+    }
 }
