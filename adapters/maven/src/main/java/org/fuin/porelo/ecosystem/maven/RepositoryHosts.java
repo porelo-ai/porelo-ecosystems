@@ -7,6 +7,7 @@ import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -394,8 +395,11 @@ public final class RepositoryHosts {
         request.setPomFile(pom.toFile());
         request.setModelSource(new FileModelSource(pom.toFile()));
         // The builder fills these in where they stand, and the next pom must see them as written.
+        // In the files' order: of two profiles with a repository of one id, the later one's counts.
+        List<String> order = settings.profileOrder();
         request.setProfiles(
                 Stream.concat(settings.activeProfiles().stream(), decidedProfiles().stream())
+                        .sorted(Comparator.comparingInt(profile -> order.indexOf(profile.getId())))
                         .map(Profile::clone)
                         .toList());
         List<String> active = new ArrayList<>(settings.activeProfileIds());

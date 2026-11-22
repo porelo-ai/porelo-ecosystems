@@ -2693,7 +2693,7 @@ class MavenEcosystemTest {
             assertThat(detect().findings())
                     .as("both conditions stand in the checkout, so Maven turns the profile on")
                     .anyMatch(x -> x.key().equals("host.snapshots.example.org"))
-                    .noneMatch(x -> x.key().equals("profile standard"));
+                    .noneMatch(x -> x.key().equals("unknown.profile standard"));
         }
 
         @Test
@@ -2736,6 +2736,54 @@ class MavenEcosystemTest {
             assertThat(detect().findings())
                     .as("where the build runs decides it, so it is named, never left unsaid")
                     .anyMatch(x -> x.key().equals("unknown.profile stage") && x.unknown());
+        }
+
+        @Test
+        void settingsProfilesMergeInTheirFileOrderAsMavensDo() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            "settings.xml",
+                            """
+                            <settings><profiles>
+                              <profile><id>a</id>
+                                <activation><property><name>internal</name></property></activation>
+                                <repositories><repository><id>inhouse</id>
+                                  <url>https://a.example.org/m2</url></repository></repositories>
+                              </profile>
+                              <profile><id>b</id>
+                                <repositories><repository><id>inhouse</id>
+                                  <url>https://b.example.org/m2</url></repository></repositories>
+                              </profile>
+                            </profiles>
+                            <activeProfiles><activeProfile>b</activeProfile></activeProfiles></settings>
+                            """)
+                    .pom(".mvn/maven.config", "-Dinternal=true\n-s\nsettings.xml\n");
+
+            assertThat(detect().findings())
+                    .as("the later profile's repository of one id is the one the build reaches")
+                    .anyMatch(x -> x.key().equals("host.b.example.org"))
+                    .noneMatch(x -> x.key().equals("host.a.example.org"));
+        }
+
+        @Test
+        void aSettingsProfileOnAPropertyOfTheJvmIsNamed() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            "settings.xml",
+                            """
+                            <settings><profiles><profile><id>wide</id>
+                              <activation>
+                                <property><name>sun.arch.data.model</name><value>64</value></property>
+                              </activation>
+                              <repositories><repository><id>wide</id>
+                                <url>https://x64.example.org/m2</url></repository></repositories>
+                            </profile></profiles></settings>
+                            """)
+                    .pom(".mvn/maven.config", "-s\nsettings.xml\n");
+
+            assertThat(detect().findings())
+                    .as("the JVM the build runs on decides it, so it is named")
+                    .anyMatch(x -> x.key().equals("unknown.profile wide") && x.unknown());
         }
 
         @Test

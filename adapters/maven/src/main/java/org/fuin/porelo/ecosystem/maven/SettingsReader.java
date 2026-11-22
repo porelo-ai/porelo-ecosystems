@@ -142,6 +142,7 @@ final class SettingsReader {
                                         + ", and Maven stops on it too; nothing in it is read",
                                 place)),
                 List.of(),
+                List.of(),
                 List.of());
     }
 
@@ -519,7 +520,8 @@ final class SettingsReader {
                 conditional,
                 unread,
                 idle,
-                proxies);
+                proxies,
+                profiles.stream().map(draft -> draft.id == null ? "default" : draft.id).toList());
     }
 
     // Maven fills in the settings when it reads them, before any pom's property counts.

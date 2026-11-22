@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Stream;
 import org.apache.maven.model.Profile;
 import org.fuin.porelo.ecosystem.shared.Place;
 import org.jspecify.annotations.Nullable;
@@ -23,6 +24,8 @@ import org.jspecify.annotations.Nullable;
  * @param unread what Maven would fill in or refuse, and nothing here does
  * @param idleProfiles the profiles nothing in their own file activates, which another file can
  * @param proxies the active proxies
+ * @param profileOrder every profile's id in the order Maven applies them, a later one's repository
+ *     of the same id over an earlier one's
  */
 record UserSettings(
         @Nullable String localRepository,
@@ -33,12 +36,13 @@ record UserSettings(
         List<SettingsCondition> unknowns,
         List<Unread> unread,
         List<Profile> idleProfiles,
-        List<Proxy> proxies) {
+        List<Proxy> proxies,
+        List<String> profileOrder) {
 
     static final UserSettings NONE =
             new UserSettings(
                     null, List.of(), Map.of(), List.of(), List.of(), List.of(), List.of(),
-                    List.of(), List.of());
+                    List.of(), List.of(), List.of());
 
     /** A mirror as the settings write it. */
     record Mirror(
@@ -113,6 +117,10 @@ record UserSettings(
                 conditions,
                 allUnread,
                 List.copyOf(allIdle.values()),
-                List.copyOf(allProxies.values()));
+                List.copyOf(allProxies.values()),
+                Stream.concat(
+                                profileOrder.stream(),
+                                global.profileOrder.stream().filter(id -> !mine.contains(id)))
+                        .toList());
     }
 }

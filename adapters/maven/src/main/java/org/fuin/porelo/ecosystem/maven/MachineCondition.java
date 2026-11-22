@@ -20,7 +20,22 @@ import org.jspecify.annotations.Nullable;
  */
 final class MachineCondition implements ProfileActivator {
     private static final Set<String> OF_THE_MACHINE =
-            Set.of("env.", "java.", "os.", "user.", "file.", "line.", "path.");
+            Set.of(
+                    "env.",
+                    "java.",
+                    "os.",
+                    "user.",
+                    "file.",
+                    "line.",
+                    "path.",
+                    "sun.",
+                    "jdk.",
+                    "native.",
+                    "stdout.",
+                    "stderr.",
+                    "library.",
+                    "classworlds.",
+                    "maven.conf");
 
     private final Path checkout;
 
