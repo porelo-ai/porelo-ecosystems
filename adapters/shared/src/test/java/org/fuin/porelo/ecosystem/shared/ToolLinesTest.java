@@ -3,6 +3,7 @@ package org.fuin.porelo.ecosystem.shared;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -22,6 +23,28 @@ class ToolLinesTest {
         assertThatThrownBy(() -> ToolLines.installBeside(name, TOOL))
                 .as("'%s' beside another tool too", name)
                 .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> ToolLines.installProgram(name, TOOL))
+                .as("'%s' would leave /usr/local/bin, or the line", name)
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void aProgramIsCheckedBeforeItReachesThePath() {
+        ToolDownload shfmt =
+                new ToolDownload(
+                        "3.12.0",
+                        "https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64",
+                        "d".repeat(64));
+
+        assertThat(ToolLines.installProgram("shfmt", shfmt))
+                .as("fetched aside, checked, and only then installed where the build finds it")
+                .isEqualTo(
+                        "RUN set -eu; curl -fsSL -o /tmp/shfmt"
+                                + " 'https://github.com/mvdan/sh/releases/download/v3.12.0/shfmt_v3.12.0_linux_amd64';"
+                                + " echo '"
+                                + "d".repeat(64)
+                                + "  /tmp/shfmt' | sha256sum -c -;"
+                                + " install -m 0755 /tmp/shfmt /usr/local/bin/shfmt; rm /tmp/shfmt;");
     }
 
     @ParameterizedTest

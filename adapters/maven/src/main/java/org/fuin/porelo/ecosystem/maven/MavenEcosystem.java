@@ -129,6 +129,7 @@ public final class MavenEcosystem implements Ecosystem {
                 findings.stream().distinct().toList(),
                 Stream.of(
                                 answer.unplaced(),
+                                needs.unplaced(),
                                 containers.unplaced(),
                                 toolchains.unplaced(),
                                 own.notes())

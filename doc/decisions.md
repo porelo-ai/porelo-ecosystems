@@ -7,7 +7,7 @@ The choices the ecosystem adapters are built on, each with why it holds.
 | An adapter has nothing to secure | it runs no code and stays bounded, its answer is untrusted input, and the person's confirmation is the control; so it aims at the hosts the real build would reach, each with its file and line, no password appears, and a broken or huge pom gets an answer, not a crash | [entry](#an-adapter-has-nothing-to-secure) |
 | An adapter is judged by real builds | open source projects, by a plain clone at pinned commits, must build in a real task from the file Porelo's own first start writes, with only the adapter's code fixed | [entry](#an-adapter-is-judged-by-real-builds) |
 | The Maven answer follows real Maven | where Maven's behavior is not obvious, the answer does what real Maven was measured doing; what stays out of it is named | [entry](#the-maven-answer-follows-real-maven) |
-| A project's tools are fetched by URL and digest | the JDK, Maven and GraalVM come from their vendors' archives, each checked against the digest its vendor names, in ordinary image lines the person can read and change; no tool manager, and pre-releases never count | [entry](#a-projects-tools-are-fetched-by-url-and-digest) |
+| A project's tools are fetched by URL and digest | the JDK, Maven, GraalVM and shfmt come from their vendors' archives, each checked against the digest its vendor names, in ordinary image lines the person can read and change; no tool manager, and pre-releases never count | [entry](#a-projects-tools-are-fetched-by-url-and-digest) |
 
 ## An adapter has nothing to secure
 
@@ -60,14 +60,15 @@ What stays out of the answer, each named here because no fixture shows it:
 - **Builder and comparison differ in version:** the module builds on `maven-model-builder` 3.10.0 and compares with the wrapper's Maven 3.9.15, so what only 3.10 does has no reference. It stays because the comparison runs the Maven a build runs; a wrapper on 3.10 closes it.
 - **A server is matched by id alone,** while Maven 3.10 can hold a credential back from a host not declared for that server, so the answer can call a server known where such a build sends nothing. It stays because only an id is answered, and never a credential's value; a use that stores a credential per host would change it.
 - **A settings profile on a property or a file stays an unknown,** though a pom's is evaluated. It stays because an unknown names it rather than guessing; a checkout that needs it answered would change it.
-- **A `-D` or `-P` on the command line is not seen:** it stands in no file, and nothing else can be read for it.
+- **A `-D` or `-P` on the command line is not seen:** it stands in no file, and nothing else can be read for it. A pom's profile left off whose plugins need GraalVM, a package or a script is named at its plugin's line instead, so the person adds what a build that turns it on needs.
 
 ## A project's tools are fetched by URL and digest
 
 A distribution's packages decide a tool's version, and a pom asking Maven 3.9 then meets 3.8.7. So what a project asks is installed in the exact version, found once when `porelo.yml` is made and written there as ordinary `image.run` lines and `image.env` values, which are the person's from then on.
 
-- **No tool manager.** SDKMAN's installer fetches its own code with no digest, and its service sends no checksum for Temurin, GraalVM, Maven or Gradle, so their archives go unchecked; it also adds a host and a mapping of its own, and holds no Node, Python or Flutter. Every vendor names a digest beside its archive, and one small `RUN` that fetches, checks and unpacks serves every tool.
+- **No tool manager.** SDKMAN's installer fetches its own code with no digest, and its service sends no checksum for Temurin, GraalVM, Maven or Gradle, so their archives go unchecked; it also adds a host and a mapping of its own, and holds no Node, Python or Flutter. Every vendor names a digest beside its archive, and one small `RUN` that fetches, checks and unpacks serves every tool; a tool that is one program, as shfmt, is fetched, checked and installed the same way.
 - **The vendors' own lists answer the version.** Foojay's service was weighed as one source for all JDKs; on the day a release appeared it still answered the one before. GraalVM's major is read from an asset's name, since its tags no longer carry it.
+- **A version a build pins exactly is fetched in that version, never the newest:** Spotless compares every script against the shfmt it pins and downloads none, so another version fails the build, and a distribution's shfmt never stands in for it.
 - **Pre-releases are filtered by the version itself, never by the source's word:** a version is stable only without a qualifier, and a range is applied after that filter. Maven's metadata names a release candidate as its `release`.
 - **The digest comes from the same source as the archive.** It catches a broken or changed download from then on; of the first sight it proves no more than the TLS connection it was read over. The person confirms each line.
 - **What a vendor answered becomes a line a build runs as root,** so a URL, version and digest are written only when each is `https`, on a known host, of a plain character set, and a hex digest; anything else is unknown.

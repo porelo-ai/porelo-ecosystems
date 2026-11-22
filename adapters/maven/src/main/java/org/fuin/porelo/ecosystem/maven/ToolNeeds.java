@@ -5,9 +5,11 @@ import static java.util.stream.Collectors.joining;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -15,9 +17,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.Set;
 import java.util.function.IntPredicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.apache.maven.model.Build;
@@ -25,12 +29,14 @@ import org.apache.maven.model.InputLocation;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
+import org.apache.maven.model.Profile;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.shared.Answers;
 import org.fuin.porelo.ecosystem.shared.Origin;
 import org.fuin.porelo.ecosystem.shared.Place;
 import org.fuin.porelo.ecosystem.shared.UnknownValue;
+import org.fuin.porelo.ecosystem.shared.Unplaced;
 import org.jspecify.annotations.Nullable;
 
 /** What a task's image must hold and how much memory the build asks, from the effective models. */
@@ -46,7 +52,9 @@ final class ToolNeeds {
                     "org.apache.maven.plugins:maven-surefire-plugin",
                     "org.apache.maven.plugins:maven-failsafe-plugin");
     private static final String NATIVE = "org.graalvm.buildtools:native-maven-plugin";
-    // What a plugin runs from the system, as far as is known without running it.
+    private static final String SPOTLESS = "com.diffplug.spotless:spotless-maven-plugin";
+    // What a plugin runs from the system, as far as is known without running it; jdeb and
+    // de.dentrassi's rpm plugin write their packages in Java and are not named.
     private static final Map<String, List<String>> PACKAGES =
             Map.of(
                     NATIVE,
@@ -58,7 +66,9 @@ final class ToolNeeds {
                     "pl.project13.maven:git-commit-id-plugin",
                     List.of("git"),
                     "org.codehaus.mojo:buildnumber-maven-plugin",
-                    List.of("git"));
+                    List.of("git"),
+                    "org.codehaus.mojo:rpm-maven-plugin",
+                    List.of("rpm"));
     // The JDKs Ubuntu 24.04, Porelo's default image, packages, as measured; a JDK compiles older
     // releases.
     private static final int HIGHEST_MAJOR = 9999;
@@ -83,8 +93,13 @@ final class ToolNeeds {
     private final Map<String, Finding> packages = new LinkedHashMap<>();
     private final List<Finding> fromFiles = new ArrayList<>();
     private final List<Finding> wrapperPackages = new ArrayList<>();
+    private @Nullable Finding shfmt;
+    private final MachineCondition machineCondition;
+    private final List<Unplaced> unplaced = new ArrayList<>();
+    private final Set<String> unplacedSeen = new HashSet<>();
 
     ToolNeeds(Path checkout) {
+        this.machineCondition = new MachineCondition(checkout);
         this.checkout = checkout;
         readWrapper();
         readJvmConfig();
@@ -96,7 +111,14 @@ final class ToolNeeds {
         readJava(model, places);
         readMaven(model, places);
         readPackages(model, places);
+        readShfmt(model, places);
+        readProfilesLeftOff(model, places);
         readTestMemory(model, places);
+    }
+
+    /** What a build may need that the answer leaves out, once for each place it stands. */
+    List<Unplaced> unplaced() {
+        return List.copyOf(unplaced);
     }
 
     /**
@@ -192,6 +214,9 @@ final class ToolNeeds {
                                             : "")));
         }
         all.addAll(packages.values());
+        if (shfmt != null) {
+            all.add(shfmt);
+        }
         all.addAll(fromFiles);
         if (testMemory != null) {
             all.add(testMemory);
@@ -501,10 +526,13 @@ final class ToolNeeds {
             return;
         }
         // In the checkout it needs no package, and a JDK's or Maven's is named already.
-        if (written.startsWith(".") || written.equals("java") || written.equals("mvn")) {
+        if (written.startsWith(".")
+                || inCheckout(written)
+                || written.equals("java")
+                || written.equals("mvn")) {
             return;
         }
-        String name = written.substring(written.lastIndexOf('/') + 1);
+        String name = programName(written);
         packages.putIfAbsent(
                 name,
                 Answers.tool(
@@ -512,6 +540,174 @@ final class ToolNeeds {
                         name,
                         place,
                         "exec-maven-plugin runs it; the package holding it may be named otherwise"));
+    }
+
+    // ${project.basedir} is filled in as the pom's own directory, inside the checkout.
+    private boolean inCheckout(String written) {
+        try {
+            Path path = Path.of(written);
+            return path.isAbsolute() && path.normalize().startsWith(checkout);
+        } catch (InvalidPathException e) {
+            return false;
+        }
+    }
+
+    private static String programName(String written) {
+        return written.substring(written.lastIndexOf('/') + 1);
+    }
+
+    // Spotless runs shfmt from the path and fetches none, so the image needs the exact one.
+    private void readShfmt(Model model, Places places) {
+        if (shfmt != null) {
+            return;
+        }
+        Optional<Xpp3Dom> used =
+                configurations(model, SPOTLESS).stream()
+                        .map(ToolNeeds::shfmtStep)
+                        .filter(Objects::nonNull)
+                        .findFirst();
+        if (used.isPresent()) {
+            shfmt = shfmtVersion(used.get(), places);
+            return;
+        }
+        managedConfigurations(model, SPOTLESS).stream()
+                .map(ToolNeeds::shfmtStep)
+                .filter(Objects::nonNull)
+                .map(step -> step.getChild("version"))
+                .filter(Objects::nonNull)
+                .findFirst()
+                .ifPresent(version -> nameManagedShfmt(version, places));
+    }
+
+    private static @Nullable Xpp3Dom shfmtStep(Xpp3Dom configuration) {
+        Xpp3Dom shell = configuration.getChild("shell");
+        return shell == null ? null : shell.getChild("shfmt");
+    }
+
+    private static Finding shfmtVersion(Xpp3Dom step, Places places) {
+        Xpp3Dom version = step.getChild("version");
+        String written = version == null ? null : version.getValue();
+        if (written == null || written.isBlank()) {
+            return Answers.unknown(
+                    Finding.Part.TOOLS,
+                    "shfmt.version",
+                    places.of(location(step)),
+                    "Spotless's shfmt step names no version, so the default of Spotless's own"
+                            + " release is asked, which is not read");
+        }
+        Place place = places.of(location(version));
+        String plain = written.strip();
+        if (plain.contains("${")) {
+            return Answers.unknown(
+                    Finding.Part.TOOLS,
+                    "shfmt.version",
+                    place,
+                    "Spotless's shfmt version is written as "
+                            + plain
+                            + ", which nothing read fills in");
+        }
+        return Answers.tool(
+                "shfmt.version",
+                plain,
+                place,
+                "Spotless checks shell scripts against this shfmt, which it runs from the path and"
+                        + " does not download");
+    }
+
+    // A parent's pin for its children is the checkout's own only when it stands in the checkout.
+    private void nameManagedShfmt(Xpp3Dom version, Places places) {
+        Place place = places.of(location(version));
+        String written = version.getValue();
+        if (written != null && place.origin() == Origin.CHECKOUT) {
+            leftOut(
+                    place,
+                    "pluginManagement pins shfmt "
+                            + written.strip()
+                            + " for Spotless, which no pom here runs; a build that runs Spotless's"
+                            + " shell step needs exactly that shfmt on the path");
+        }
+    }
+
+    // An active profile's plugins stand in the build itself; what stays apart was left off.
+    private void readProfilesLeftOff(Model model, Places places) {
+        Set<String> running = used(model).stream().map(Plugin::getKey).collect(Collectors.toSet());
+        Set<String> runningExecutables =
+                configurations(model, EXEC).stream()
+                        .map(configuration -> configuration.getChild("executable"))
+                        .filter(e -> e != null && e.getValue() != null)
+                        .map(e -> e.getValue().strip())
+                        .collect(Collectors.toSet());
+        for (Profile profile : model.getProfiles()) {
+            if (profile.getBuild() == null) {
+                continue;
+            }
+            for (Plugin plugin : profile.getBuild().getPlugins()) {
+                if (plugin.getKey().equals(EXEC)) {
+                    nameExecutablesLeftOff(profile, plugin, runningExecutables, places);
+                } else if (!running.contains(plugin.getKey())
+                        && (plugin.getKey().equals(NATIVE)
+                                || PACKAGES.containsKey(plugin.getKey()))) {
+                    leftOut(
+                            places.of(plugin.getLocation("")),
+                            offProfile(profile)
+                                    + "; "
+                                    + plugin.getArtifactId()
+                                    + " in it "
+                                    + (plugin.getKey().equals(NATIVE)
+                                            ? "builds with GraalVM's native-image and "
+                                            : "")
+                                    + "runs "
+                                    + String.join(
+                                            ", ", PACKAGES.getOrDefault(plugin.getKey(), List.of()))
+                                    + ", which the answer leaves out");
+                }
+            }
+        }
+    }
+
+    private void nameExecutablesLeftOff(
+            Profile profile, Plugin plugin, Set<String> running, Places places) {
+        for (Xpp3Dom configuration : settings(plugin).toList()) {
+            Xpp3Dom executable = configuration.getChild("executable");
+            if (executable == null || executable.getValue() == null) {
+                continue;
+            }
+            String written = executable.getValue().strip();
+            if (running.contains(written)
+                    || written.startsWith("${java.home}")
+                    || written.equals("java")
+                    || written.equals("mvn")) {
+                continue;
+            }
+            leftOut(
+                    places.of(location(executable)),
+                    offProfile(profile)
+                            + "; exec-maven-plugin in it runs "
+                            + programName(written)
+                            + ", and what that needs the answer leaves out");
+        }
+    }
+
+    private String offProfile(Profile profile) {
+        @Nullable String condition = machineCondition.of(profile.getActivation());
+        if (condition != null) {
+            return "profile "
+                    + profile.getId()
+                    + " is active only under a condition on "
+                    + condition
+                    + ", which depends on where the build runs";
+        }
+        return "profile "
+                + profile.getId()
+                + " is off unless the build's command turns it on (-P"
+                + profile.getId()
+                + ")";
+    }
+
+    private void leftOut(Place place, String note) {
+        if (unplacedSeen.add(place.file() + "\n" + note)) {
+            unplaced.add(new Unplaced(note, place));
+        }
     }
 
     private void readTestMemory(Model model, Places places) {

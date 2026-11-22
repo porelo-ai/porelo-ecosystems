@@ -393,6 +393,284 @@ class MavenEcosystemTest {
                             "package.maven");
             assertThat(only("package.${tool.path}").unknown()).as("never guessed").isTrue();
         }
+
+        @Test
+        void theCodehausRpmPluginNeedsRpmbuildFromTheRpmPackage() throws IOException {
+            f.pom("pom.xml", project("child", plugin("org.codehaus.mojo", "rpm-maven-plugin", "")));
+
+            assertThat(only("package.rpm").value())
+                    .as("rpm-maven-plugin runs rpmbuild, which Ubuntu's rpm package holds")
+                    .isEqualTo("rpm");
+            assertThat(only("package.rpm").line())
+                    .as("the plugin's line, so the person reads why")
+                    .isPositive();
+        }
+
+        @Test
+        void aScriptOfTheCheckoutNamedByItsFullPathNeedsNoPackage() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            plugin(
+                                    "org.codehaus.mojo",
+                                    "exec-maven-plugin",
+                                    "<configuration><executable>${project.basedir}/tools/gen.sh"
+                                            + "</executable></configuration>")));
+
+            assertThat(detect().findings())
+                    .as("no distribution packages the checkout's own script")
+                    .noneMatch(x -> x.key().equals("package.gen.sh"));
+        }
+    }
+
+    /** Harm prevented: Spotless fails every shell script on an shfmt the image lacks or differs. */
+    @Nested
+    class TheShellFormatter {
+        private static final String MANAGED =
+                """
+                  <properties><shfmt.version>3.12.0</shfmt.version></properties>
+                  <build><pluginManagement><plugins><plugin>
+                    <groupId>com.diffplug.spotless</groupId>
+                    <artifactId>spotless-maven-plugin</artifactId>
+                    <configuration>
+                      <java><googleJavaFormat/></java>
+                      <shell>
+                        <shfmt>
+                          %s
+                        </shfmt>
+                      </shell>
+                    </configuration>
+                  </plugin></plugins></pluginManagement></build>
+                """;
+        private static final String USED =
+                """
+                  <build><plugins><plugin>
+                    <groupId>com.diffplug.spotless</groupId>
+                    <artifactId>spotless-maven-plugin</artifactId>
+                  </plugin></plugins></build>
+                """;
+
+        private void parentManaging(String shfmt) throws IOException {
+            f.pom("parent/pom.xml", project("parent", MANAGED.formatted(shfmt)))
+                    .pom(
+                            "pom.xml",
+                            project("child", Fixture.parent("parent", "parent/pom.xml") + USED));
+        }
+
+        private static int lineOf(String xml, String text) {
+            List<String> lines = xml.lines().toList();
+            for (int i = 0; i < lines.size(); i++) {
+                if (lines.get(i).contains(text)) {
+                    return i + 1;
+                }
+            }
+            throw new AssertionError("no line holds " + text);
+        }
+
+        @Test
+        void aPinnedShfmtManagedThroughAPropertyIsAnsweredAtThatVersion() throws IOException {
+            parentManaging("<version>${shfmt.version}</version>");
+
+            Finding shfmt = only("shfmt.version");
+
+            assertThat(shfmt.value())
+                    .as("exactly the version Spotless compares against")
+                    .isEqualTo("3.12.0");
+            assertThat(shfmt.unknown()).as("read, not guessed").isFalse();
+            assertThat(shfmt.file()).as("the pom that pins it").isEqualTo("parent/pom.xml");
+            assertThat(shfmt.line())
+                    .as("the line of the step's version")
+                    .isEqualTo(
+                            lineOf(
+                                    project(
+                                            "parent",
+                                            MANAGED.formatted(
+                                                    "<version>${shfmt.version}</version>")),
+                                    "<version>${shfmt.version}</version>"));
+        }
+
+        @Test
+        void aVersionNothingFillsInIsUnknownAtItsLine() throws IOException {
+            parentManaging("<version>${nowhere.set}</version>");
+
+            Finding shfmt = only("shfmt.version");
+
+            assertThat(shfmt.unknown()).as("never a version guessed").isTrue();
+            assertThat(shfmt.value()).as("no value to install").isEmpty();
+            assertThat(shfmt.line()).as("where the person looks").isPositive();
+            assertThat(shfmt.note()).as("what was written").contains("${nowhere.set}");
+        }
+
+        @Test
+        void aStepNamingNoVersionIsUnknownSinceSpotlessPicksItsOwn() throws IOException {
+            parentManaging("");
+
+            Finding shfmt = only("shfmt.version");
+
+            assertThat(shfmt.unknown()).as("Spotless's default is not read").isTrue();
+            assertThat(shfmt.note()).as("why it is unknown").contains("names no version");
+        }
+
+        @Test
+        void aPinOnlyManagedInTheCheckoutIsNamedAsUnplaced() throws IOException {
+            f.pom("pom.xml", project("parent", MANAGED.formatted("<version>3.12.0</version>")));
+
+            Detection detection = detect();
+
+            assertThat(detection.findings())
+                    .as("no build here runs Spotless")
+                    .noneMatch(x -> x.key().equals("shfmt.version"));
+            assertThat(detection.unplaced())
+                    .as("a pin for builds elsewhere, which the person may want in the image")
+                    .singleElement()
+                    .satisfies(
+                            u -> {
+                                assertThat(u.file()).as("where it stands").isEqualTo("pom.xml");
+                                assertThat(u.line()).as("its line").isPositive();
+                                assertThat(u.note())
+                                        .as("what is pinned and why it is left out")
+                                        .contains("shfmt 3.12.0")
+                                        .contains("no pom here runs");
+                            });
+        }
+    }
+
+    /**
+     * Harm prevented: a profile's tools are missing unsaid when the build's command turns it on.
+     */
+    @Nested
+    class ProfilesLeftOff {
+        private static final String NATIVE_PROFILE =
+                """
+                  <profiles><profile>
+                    <id>native</id>
+                    <build><plugins><plugin>
+                      <groupId>org.graalvm.buildtools</groupId>
+                      <artifactId>native-maven-plugin</artifactId>
+                    </plugin></plugins></build>
+                  </profile></profiles>
+                """;
+
+        @Test
+        void aNativeProfileLeftOffIsNamedWithWhatItNeeds() throws IOException {
+            f.pom("pom.xml", project("child", NATIVE_PROFILE));
+
+            Detection detection = detect();
+
+            assertThat(detection.findings())
+                    .as("a profile the build may not run installs nothing")
+                    .noneMatch(x -> x.key().equals("graalvm.version"))
+                    .noneMatch(x -> x.key().equals("package.gcc"));
+            assertThat(detection.unplaced())
+                    .as("named once, at the plugin's line")
+                    .singleElement()
+                    .satisfies(
+                            u -> {
+                                assertThat(u.file()).as("where it stands").isEqualTo("pom.xml");
+                                assertThat(u.line())
+                                        .as("the plugin's line")
+                                        .isEqualTo(lineOf(project("child", NATIVE_PROFILE)));
+                                assertThat(u.note())
+                                        .as("which profile, how it is turned on, what it needs")
+                                        .contains("profile native")
+                                        .contains("-Pnative")
+                                        .contains("GraalVM")
+                                        .contains("gcc")
+                                        .contains("zlib1g-dev");
+                            });
+        }
+
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "<os><family>unix</family></os>",
+                    "<jdk>[17,)</jdk>",
+                    "<property><name>env.CI</name></property>"
+                })
+        void aProfileTheMachineTurnsOnIsNotSaidToNeedTheCommand(String activation)
+                throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            NATIVE_PROFILE.replace(
+                                    "<id>native</id>",
+                                    "<id>native</id><activation>" + activation + "</activation>")));
+
+            Detection detection = detect();
+
+            assertThat(detection.unplaced())
+                    .as("the build may turn it on by itself, so no -P is needed")
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("what the profile depends on, and what it needs")
+                                            .doesNotContain("-Pnative")
+                                            .doesNotContain("is off")
+                                            .contains("active only under a condition on")
+                                            .contains("GraalVM"));
+        }
+
+        private static int lineOf(String xml) {
+            List<String> lines = xml.lines().toList();
+            for (int i = 0; i < lines.size(); i++) {
+                if (lines.get(i).contains("<plugin>")) {
+                    return i + 1;
+                }
+            }
+            throw new AssertionError("no plugin");
+        }
+
+        @Test
+        void aProfileTheCheckoutTurnsOnIsAnsweredAndNotNamed() throws IOException {
+            f.pom("pom.xml", project("child", NATIVE_PROFILE))
+                    .pom(".mvn/maven.config", "-Pnative\n");
+
+            Detection detection = detect();
+
+            assertThat(only("graalvm.version").line())
+                    .as("the build runs it, so its tools are answered")
+                    .isPositive();
+            assertThat(detection.unplaced())
+                    .as("nothing is left out")
+                    .noneMatch(u -> u.note().contains("profile native"));
+        }
+
+        @Test
+        void aScriptAProfileLeftOffRunsIsNamed() throws IOException {
+            f.pom(
+                    "pom.xml",
+                    project(
+                            "child",
+                            """
+                              <profiles><profile>
+                                <id>dist</id>
+                                <build><plugins><plugin>
+                                  <groupId>org.codehaus.mojo</groupId>
+                                  <artifactId>exec-maven-plugin</artifactId>
+                                  <executions><execution><id>tree</id><configuration>
+                                    <executable>${project.basedir}/tools/build-tree.sh</executable>
+                                  </configuration></execution>
+                                  <execution><id>java</id><configuration>
+                                    <executable>${java.home}/bin/java</executable>
+                                  </configuration></execution></executions>
+                                </plugin></plugins></build>
+                              </profile></profiles>
+                            """));
+
+            assertThat(detect().unplaced())
+                    .as("what the script needs is the person's to add, and the JDK's java is not")
+                    .singleElement()
+                    .satisfies(
+                            u ->
+                                    assertThat(u.note())
+                                            .as("the profile and what it runs")
+                                            .contains("profile dist")
+                                            .contains("build-tree.sh")
+                                            .doesNotContain("bin/java"));
+        }
     }
 
     /** Harm prevented: the image has no JDK or Maven, so no build can start in a task. */

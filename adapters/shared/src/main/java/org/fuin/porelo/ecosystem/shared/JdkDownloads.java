@@ -1,15 +1,18 @@
 package org.fuin.porelo.ecosystem.shared;
 
+import static org.fuin.porelo.ecosystem.shared.VendorJson.address;
+import static org.fuin.porelo.ecosystem.shared.VendorJson.asset;
+import static org.fuin.porelo.ecosystem.shared.VendorJson.githubDigest;
+import static org.fuin.porelo.ecosystem.shared.VendorJson.map;
+import static org.fuin.porelo.ecosystem.shared.VendorJson.text;
+
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
-import org.yaml.snakeyaml.LoaderOptions;
-import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.SafeConstructor;
-import org.yaml.snakeyaml.error.YAMLException;
 
 /** Finds the newest stable JDK of a major, from each JDK's own vendor. */
 public final class JdkDownloads {
@@ -94,63 +97,21 @@ public final class JdkDownloads {
 
     // A release before GitHub named digests holds it in a file of its own beside the archive.
     private String graalvmDigest(Map<?, ?> archive, List<?> assets) {
-        if (archive.get("digest") != null) {
-            String named = text(archive.get("digest"));
-            if (!named.startsWith("sha256:")) {
-                throw new ToolUnavailable("a digest of another kind");
-            }
-            return named.substring("sha256:".length());
+        Optional<String> named = githubDigest(archive);
+        if (named.isPresent()) {
+            return named.get();
         }
-        String beside = text(archive.get("name")) + ".sha256";
-        for (Object one : assets) {
-            Map<?, ?> asset = map(one);
-            if (beside.equals(asset.get("name"))) {
-                String url = text(asset.get("browser_download_url"));
-                if (url.startsWith("https://github.com/")) {
-                    return fetch.answer(address(url)).strip().split("\\s+")[0];
-                }
+        Optional<Map<?, ?>> beside = asset(assets, text(archive.get("name")) + ".sha256");
+        if (beside.isPresent()) {
+            String url = text(beside.get().get("browser_download_url"));
+            if (url.startsWith("https://github.com/")) {
+                return fetch.answer(address(url)).strip().split("\\s+")[0];
             }
         }
         throw new ToolUnavailable("GraalVM's release names no digest");
     }
 
     private @Nullable Object parse(URI uri) {
-        try {
-            return new Yaml(new SafeConstructor(answerOptions())).load(fetch.answer(uri));
-        } catch (YAMLException e) {
-            throw new ToolUnavailable(uri.getHost() + " answered no JSON");
-        }
-    }
-
-    // JSON read as YAML: as long as an answer may be, and a key named twice is no answer.
-    private static LoaderOptions answerOptions() {
-        LoaderOptions options = new LoaderOptions();
-        options.setCodePointLimit(VendorHttp.MOST_BYTES);
-        options.setAllowDuplicateKeys(false);
-        // A tag or a number the constructor cannot build throws past YAMLException otherwise.
-        options.setWrappedToRootException(true);
-        return options;
-    }
-
-    private static URI address(String url) {
-        try {
-            return new URI(url);
-        } catch (java.net.URISyntaxException e) {
-            throw new ToolUnavailable("GitHub named a digest at no address");
-        }
-    }
-
-    private static Map<?, ?> map(@Nullable Object value) {
-        if (value instanceof Map<?, ?> map) {
-            return map;
-        }
-        throw new ToolUnavailable("a vendor's answer is not shaped as measured");
-    }
-
-    private static String text(@Nullable Object value) {
-        if (value instanceof String text) {
-            return text;
-        }
-        throw new ToolUnavailable("a vendor's answer is not shaped as measured");
+        return VendorJson.parse(fetch, uri);
     }
 }

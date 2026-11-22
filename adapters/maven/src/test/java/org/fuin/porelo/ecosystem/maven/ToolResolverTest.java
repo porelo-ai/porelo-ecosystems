@@ -410,4 +410,61 @@ class ToolResolverTest {
                 .contains("/opt/graalvm");
         assertThat(joined.get(2)).as("Maven's, in any place").contains("/opt/maven");
     }
+
+    private void shfmt(String version) {
+        answers.put(
+                "https://api.github.com/repos/mvdan/sh/releases/tags/v" + version,
+                """
+                {"tag_name":"v%s","prerelease":false,"draft":false,"assets":[
+                  {"name":"shfmt_v%s_linux_amd64","digest":"sha256:%s",
+                   "browser_download_url":"https://github.com/mvdan/sh/releases/download/v%s/shfmt_v%s_linux_amd64"}]}
+                """
+                        .formatted(version, version, SHA256, version, version));
+    }
+
+    /** Harm prevented: Spotless fails every script on an shfmt of another version, or none. */
+    @Test
+    void aPinnedShfmtIsFetchedAtExactlyThatVersion() {
+        asked.add(finding("shfmt.version", "3.12.0", false));
+        shfmt("3.12.0");
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(only(all, "run.4-shfmt").value())
+                .as("the pinned release's binary, checked by its digest")
+                .contains("/download/v3.12.0/shfmt_v3.12.0_linux_amd64")
+                .contains(SHA256)
+                .contains("/usr/local/bin/shfmt");
+        assertThat(only(all, "run.4-shfmt").line()).as("where the pin stands").isEqualTo(7);
+        assertThat(only(all, "shfmt.version").value())
+                .as("what was asked stays")
+                .isEqualTo("3.12.0");
+    }
+
+    /** Harm prevented: a distribution's shfmt of another version stands in for the pinned one. */
+    @Test
+    void aShfmtNotFoundIsUnknownAndNothingStandsIn() {
+        asked.add(finding("shfmt.version", "3.12.0", false));
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(all)
+                .as("no line and no package of another version")
+                .noneMatch(f -> f.key().equals("run.4-shfmt") || f.key().equals("package.shfmt"));
+        assertThat(only(all, "shfmt.version").unknown())
+                .as("the person reads that it is missing")
+                .isTrue();
+        assertThat(only(all, "shfmt.version").note())
+                .as("what was asked")
+                .contains("shfmt 3.12.0 was asked");
+    }
+
+    /** Harm prevented: a version nobody read is fetched as if it were the pin. */
+    @Test
+    void anUnknownShfmtAsksTheVendorNothing() {
+        asked.add(finding("shfmt.version", "", true));
+        shfmt("3.12.0");
+
+        assertThat(resolver.resolve(asked)).as("what Detect left unknown stays").isEqualTo(asked);
+    }
 }

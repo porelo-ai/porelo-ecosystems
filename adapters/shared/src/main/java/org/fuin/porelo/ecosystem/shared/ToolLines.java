@@ -38,6 +38,32 @@ public final class ToolLines {
                 + " done";
     }
 
+    /**
+     * A tool that is one program, installed on the path under its name.
+     *
+     * @param name the program's name in {@code /usr/local/bin}
+     * @param tool its binary
+     * @return the image line
+     * @throws IllegalArgumentException when the name is no plain program name
+     */
+    public static String installProgram(String name, ToolDownload tool) {
+        if (!NAME.matcher(name).matches()) {
+            throw new IllegalArgumentException("no plain program name for a tool: " + name);
+        }
+        String file = "/tmp/" + name;
+        return ("RUN set -eu; curl -fsSL -o %s '%s'; echo '%s  %s' | %s -c -;"
+                        + " install -m 0755 %s /usr/local/bin/%s; rm %s;")
+                .formatted(
+                        file,
+                        tool.url(),
+                        tool.digest(),
+                        file,
+                        tool.checkCommand(),
+                        file,
+                        name,
+                        file);
+    }
+
     private static String fetched(String name, ToolDownload tool) {
         if (!NAME.matcher(name).matches()) {
             throw new IllegalArgumentException("no plain folder name for a tool: " + name);

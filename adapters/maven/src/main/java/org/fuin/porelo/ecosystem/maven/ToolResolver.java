@@ -8,6 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.shared.JdkDownloads;
+import org.fuin.porelo.ecosystem.shared.ShfmtDownloads;
 import org.fuin.porelo.ecosystem.shared.ToolDownload;
 import org.fuin.porelo.ecosystem.shared.ToolLines;
 import org.fuin.porelo.ecosystem.shared.ToolUnavailable;
@@ -35,10 +36,12 @@ final class ToolResolver {
 
     private final JdkDownloads jdks;
     private final MavenDownloads mavens;
+    private final ShfmtDownloads shfmts;
 
     ToolResolver(VendorFetch fetch) {
         this.jdks = new JdkDownloads(fetch);
         this.mavens = new MavenDownloads(fetch);
+        this.shfmts = new ShfmtDownloads(fetch);
     }
 
     /** Answers what replaces {@code findings}. */
@@ -67,7 +70,42 @@ final class ToolResolver {
                         true);
             }
         }
+        find(findings, "shfmt.version")
+                .filter(f -> !f.unknown())
+                .ifPresent(asked -> resolveShfmt(all, asked));
         return List.copyOf(all);
+    }
+
+    private void resolveShfmt(List<Finding> all, Finding asked) {
+        try {
+            ToolDownload shfmt = shfmts.shfmt(asked.value());
+            all.add(
+                    line(
+                            asked,
+                            "run.4-shfmt",
+                            ToolLines.installProgram("shfmt", shfmt),
+                            "shfmt " + shfmt.version() + ", the version Spotless is pinned to"));
+        } catch (ToolUnavailable e) {
+            // A distribution's shfmt is another version, which Spotless refuses; an unknown holds
+            // no value, so the version asked stays in the note.
+            all.replaceAll(
+                    f ->
+                            f.key().equals("shfmt.version")
+                                    ? new Finding(
+                                            f.part(),
+                                            f.key(),
+                                            "",
+                                            f.file(),
+                                            f.line(),
+                                            f.origin(),
+                                            true,
+                                            f.note()
+                                                    + "; shfmt "
+                                                    + asked.value()
+                                                    + " was asked, and not found: "
+                                                    + e.getMessage())
+                                    : f);
+        }
     }
 
     private static int askedJava(List<Finding> findings) {
