@@ -7,6 +7,8 @@ import java.util.Set;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
+import org.fuin.porelo.ecosystem.shared.Place;
+import org.fuin.porelo.ecosystem.shared.Unplaced;
 
 /** What in a build starts containers, which a task does not support. */
 final class ContainerUse {

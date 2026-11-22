@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.fuin.porelo.ecosystem.api.Finding;
+import org.fuin.porelo.ecosystem.shared.VendorHttp;
 import org.junit.jupiter.api.Test;
 
 /** What {@code Resolve} hands the vendors' client, and what it answers when that cannot start. */
@@ -65,7 +66,9 @@ class MavenEcosystemResolveTest {
         Map<String, String> environment = Map.of("HTTPS_PROXY", "http://user:s3cret@pro xy:1");
 
         List<Finding> answered =
-                new MavenEcosystem(environment::get, VendorHttp::new)
+                new MavenEcosystem(
+                                environment::get,
+                                proxies -> new VendorHttp("porelo-ecosystem-maven", proxies))
                         .resolve(NOWHERE, NOWHERE, ASKED)
                         .orElseThrow();
 

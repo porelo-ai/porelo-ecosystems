@@ -12,6 +12,8 @@ import org.apache.maven.model.Model;
 import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
+import org.fuin.porelo.ecosystem.shared.Place;
+import org.fuin.porelo.ecosystem.shared.Unplaced;
 import org.jspecify.annotations.Nullable;
 
 /**

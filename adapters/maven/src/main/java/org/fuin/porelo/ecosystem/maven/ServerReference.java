@@ -1,5 +1,6 @@
 package org.fuin.porelo.ecosystem.maven;
 
+import org.fuin.porelo.ecosystem.shared.Place;
 import org.jspecify.annotations.Nullable;
 
 /**

@@ -7,6 +7,11 @@ import java.util.function.Predicate;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.fuin.porelo.ecosystem.api.Finding;
+import org.fuin.porelo.ecosystem.shared.JdkDownloads;
+import org.fuin.porelo.ecosystem.shared.ToolDownload;
+import org.fuin.porelo.ecosystem.shared.ToolLines;
+import org.fuin.porelo.ecosystem.shared.ToolUnavailable;
+import org.fuin.porelo.ecosystem.shared.VendorFetch;
 
 /**
  * What a project asks, made exact: {@code Detect}'s answer with each tool's distribution package
@@ -28,10 +33,12 @@ final class ToolResolver {
     // Porelo joins run.<name> in the order of the names: the JDK's lines before GraalVM's.
     private static final String JAVA_LINES = "run.1-java";
 
-    private final ToolDownloads tools;
+    private final JdkDownloads jdks;
+    private final MavenDownloads mavens;
 
-    ToolResolver(ToolDownloads tools) {
-        this.tools = tools;
+    ToolResolver(VendorFetch fetch) {
+        this.jdks = new JdkDownloads(fetch);
+        this.mavens = new MavenDownloads(fetch);
     }
 
     /** Answers what replaces {@code findings}. */
@@ -81,7 +88,7 @@ final class ToolResolver {
             return;
         }
         try {
-            ToolDownload jdk = tools.temurin(major);
+            ToolDownload jdk = jdks.temurin(major);
             all.removeIf(packages);
             Finding at = anchor.get();
             String where = "Temurin " + jdk.version() + " for Java " + major;
@@ -106,7 +113,7 @@ final class ToolResolver {
         Optional<Mirror> mirror = mirrorOfCentral(all);
         try {
             ToolDownload maven =
-                    tools.maven(range, mirror.map(Mirror::url).orElse(ToolDownloads.CENTRAL));
+                    mavens.maven(range, mirror.map(Mirror::url).orElse(MavenDownloads.CENTRAL));
             Finding at = find(all, "package.maven").orElseThrow();
             all.removeIf(packages);
             String where =
@@ -170,7 +177,7 @@ final class ToolResolver {
     private void resolveGraalvm(List<Finding> all, int major) {
         Finding at = find(all, "graalvm.version").orElseThrow();
         try {
-            ToolDownload graalvm = tools.graalvm(major);
+            ToolDownload graalvm = jdks.graalvm(major);
             String where = "GraalVM " + graalvm.version() + " for Java " + major;
             all.add(line(at, "run.2-graalvm", ToolLines.installBeside("graalvm", graalvm), where));
             all.add(line(at, "env.GRAALVM_HOME", "/opt/graalvm", where));

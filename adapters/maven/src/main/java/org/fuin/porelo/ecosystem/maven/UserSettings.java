@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import org.apache.maven.model.Profile;
+import org.fuin.porelo.ecosystem.shared.Place;
 import org.jspecify.annotations.Nullable;
 
 /**

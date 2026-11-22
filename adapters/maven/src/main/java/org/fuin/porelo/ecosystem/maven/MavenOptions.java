@@ -10,6 +10,10 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.fuin.porelo.ecosystem.shared.Origin;
+import org.fuin.porelo.ecosystem.shared.OwnFile;
+import org.fuin.porelo.ecosystem.shared.Place;
+import org.fuin.porelo.ecosystem.shared.Unplaced;
 import org.jspecify.annotations.Nullable;
 
 /**

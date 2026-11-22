@@ -22,14 +22,13 @@ class ToolResolverTest {
     private final List<Finding> asked = new ArrayList<>();
     private final ToolResolver resolver =
             new ToolResolver(
-                    new ToolDownloads(
-                            uri -> {
-                                String answer = answers.get(uri.toString());
-                                if (answer == null) {
-                                    throw new IOException("offline");
-                                }
-                                return answer;
-                            }));
+                    uri -> {
+                        String answer = answers.get(uri.toString());
+                        if (answer == null) {
+                            throw new IOException("offline");
+                        }
+                        return answer;
+                    });
 
     private static Finding finding(String key, String value, boolean unknown) {
         return new Finding(

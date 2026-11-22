@@ -1,4 +1,4 @@
-package org.fuin.porelo.ecosystem.maven;
+package org.fuin.porelo.ecosystem.shared;
 
 import static java.nio.charset.StandardCharsets.US_ASCII;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -102,7 +102,8 @@ class VendorHttpTest {
                                     Thread.currentThread().interrupt();
                                 }
                             });
-            VendorHttp http = new VendorHttp(Map.of(), SHORT, Duration.ofSeconds(5));
+            VendorHttp http =
+                    new VendorHttp("porelo-ecosystem-test", Map.of(), SHORT, Duration.ofSeconds(5));
             URI uri = URI.create("http://127.0.0.1:" + server.getLocalPort() + "/");
 
             assertThatThrownBy(() -> http.text(uri))
@@ -133,7 +134,7 @@ class VendorHttpTest {
         try {
             URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/from");
 
-            assertThat(new VendorHttp(Map.of()).text(uri))
+            assertThat(new VendorHttp("porelo-ecosystem-test", Map.of()).text(uri))
                     .as("any server may answer with one")
                     .isEqualTo("here");
         } finally {
@@ -153,7 +154,8 @@ class VendorHttpTest {
                 });
         server.start();
         try {
-            VendorHttp http = new VendorHttp(Map.of(), SHORT, Duration.ZERO);
+            VendorHttp http =
+                    new VendorHttp("porelo-ecosystem-test", Map.of(), SHORT, Duration.ZERO);
             URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/");
 
             assertThatThrownBy(() -> http.text(uri))

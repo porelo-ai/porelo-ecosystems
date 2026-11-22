@@ -17,6 +17,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.maven.model.building.DefaultModelBuilderFactory;
 import org.apache.maven.model.building.FileModelSource;
 import org.apache.maven.model.building.ModelProcessor;
+import org.fuin.porelo.ecosystem.shared.Origin;
+import org.fuin.porelo.ecosystem.shared.Place;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;

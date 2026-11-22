@@ -1,4 +1,4 @@
-package org.fuin.porelo.ecosystem.maven;
+package org.fuin.porelo.ecosystem.shared;
 
 /**
  * A value that could not be answered, never guessed.

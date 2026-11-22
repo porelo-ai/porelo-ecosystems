@@ -1,6 +1,8 @@
 package org.fuin.porelo.ecosystem.maven;
 
 import java.util.List;
+import org.fuin.porelo.ecosystem.shared.UnknownValue;
+import org.fuin.porelo.ecosystem.shared.Unplaced;
 import org.jspecify.annotations.Nullable;
 
 /**

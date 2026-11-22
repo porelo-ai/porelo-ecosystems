@@ -19,6 +19,9 @@ import org.apache.maven.model.Model;
 import org.apache.maven.model.building.ModelProcessor;
 import org.apache.maven.model.building.ModelSource;
 import org.apache.maven.model.io.ModelParseException;
+import org.fuin.porelo.ecosystem.shared.Origin;
+import org.fuin.porelo.ecosystem.shared.Place;
+import org.fuin.porelo.ecosystem.shared.UnknownValue;
 import org.jspecify.annotations.Nullable;
 
 /** The one place every pom is read: nothing passes it outside its bounds. */

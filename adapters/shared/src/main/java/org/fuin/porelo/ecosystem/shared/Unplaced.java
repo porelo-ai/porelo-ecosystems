@@ -1,4 +1,4 @@
-package org.fuin.porelo.ecosystem.maven;
+package org.fuin.porelo.ecosystem.shared;
 
 /**
  * Something seen that the answer cannot take into account.

@@ -13,6 +13,7 @@ import org.apache.maven.model.building.FileModelSource;
 import org.apache.maven.model.building.ModelSource;
 import org.apache.maven.model.resolution.ModelResolver;
 import org.apache.maven.model.resolution.UnresolvableModelException;
+import org.fuin.porelo.ecosystem.shared.UnknownValue;
 
 /** Finds a parent by the local repository's layout, and nowhere else. */
 final class LocalRepositoryResolver implements ModelResolver {

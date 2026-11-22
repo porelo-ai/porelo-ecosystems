@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import org.fuin.porelo.ecosystem.api.Finding;
+import org.fuin.porelo.ecosystem.shared.Answers;
 
 /**
  * A repository as Porelo's draft declares it for a task, by the name its settings give it, with

@@ -27,6 +27,10 @@ import org.apache.maven.model.Plugin;
 import org.apache.maven.model.PluginExecution;
 import org.codehaus.plexus.util.xml.Xpp3Dom;
 import org.fuin.porelo.ecosystem.api.Finding;
+import org.fuin.porelo.ecosystem.shared.Answers;
+import org.fuin.porelo.ecosystem.shared.Origin;
+import org.fuin.porelo.ecosystem.shared.Place;
+import org.fuin.porelo.ecosystem.shared.UnknownValue;
 import org.jspecify.annotations.Nullable;
 
 /** What a task's image must hold and how much memory the build asks, from the effective models. */

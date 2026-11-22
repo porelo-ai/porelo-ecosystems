@@ -151,6 +151,7 @@ jobs:
                   ./mvnw -B -s settings.xml -N exec:exec@check-releases
 
             # Each as a machine would hold it: a package missing a library or built wrongly stops here, not on a person's machine.
+            # An adapter is a module that packages, by its control file: shared and an adapter without code have none.
             - name: Each package answers from what it unpacks to, with an empty environment
               run: |
                   set -euo pipefail
@@ -160,29 +161,38 @@ jobs:
                   }
                   answers() {
                       local said expected
-                      said="$(env -i "$1/usr/libexec/porelo/ecosystems/maven" describe)"
-                      expected="{\"protocolVersion\":3,\"ecosystem\":\"maven\",\"version\":\"$version\"}"
+                      said="$(env -i "$1/usr/libexec/porelo/ecosystems/$tool" describe)"
+                      expected="{\"protocolVersion\":3,\"ecosystem\":\"$tool\",\"version\":\"$version\"}"
                       echo "  $2 answers $said"
                       [ "$said" = "$expected" ] \
                           || { echo "::error::$2 answered '$said', not '$expected'"; exit 1; }
                   }
-                  deb="$(only adapters/maven/target/*.deb)"
-                  rpm="$(only adapters/maven/target/*.rpm)"
-                  # The version the package carries, which check-package-version holds the .rpm to as well.
-                  version="$(basename "$deb" _amd64.deb)"
-                  version="${version#porelo-ecosystem-maven_}"
-                  dpkg-deb -x "$deb" "$RUNNER_TEMP/deb"
-                  answers "$RUNNER_TEMP/deb" "$(basename "$deb")"
-                  mkdir "$RUNNER_TEMP/rpm"
-                  rpm2cpio "$PWD/$rpm" | (cd "$RUNNER_TEMP/rpm" && cpio -idm --quiet)
-                  answers "$RUNNER_TEMP/rpm" "$(basename "$rpm")"
+                  checked=0
+                  for control in adapters/*/src/deb/control/control; do
+                      [ -f "$control" ] || continue
+                      tool="${control#adapters/}"
+                      tool="${tool%%/*}"
+                      deb="$(only "adapters/$tool"/target/*.deb)"
+                      rpm="$(only "adapters/$tool"/target/*.rpm)"
+                      # The version the package carries, which check-package-version holds the .rpm to as well.
+                      version="$(basename "$deb" _amd64.deb)"
+                      version="${version#porelo-ecosystem-"$tool"_}"
+                      unpacked="$RUNNER_TEMP/unpacked-$tool"
+                      mkdir -p "$unpacked/deb" "$unpacked/rpm"
+                      dpkg-deb -x "$deb" "$unpacked/deb"
+                      answers "$unpacked/deb" "$(basename "$deb")"
+                      rpm2cpio "$PWD/$rpm" | (cd "$unpacked/rpm" && cpio -idm --quiet)
+                      answers "$unpacked/rpm" "$(basename "$rpm")"
+                      checked=$((checked + 1))
+                  done
+                  [ "$checked" -gt 0 ] || { echo "::error::no adapter's package was found to check"; exit 1; }
 
             - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
                   name: packages
                   path: |
-                      adapters/maven/target/*.deb
-                      adapters/maven/target/*.rpm
+                      adapters/*/target/*.deb
+                      adapters/*/target/*.rpm
                   if-no-files-found: error
 
             - name: Not publishing
@@ -244,8 +254,15 @@ jobs:
                       [ "$#" = 1 ] && [ -f "$1" ] || { echo "::error::expected one package, matched: $*" >&2; exit 1; }
                       echo "$1"
                   }
-                  deb="$(only adapters/maven/target/*.deb)"
-                  rpm="$(only adapters/maven/target/*.rpm)"
+                  # Every adapter's pair, found before anything is sent.
+                  pairs=()
+                  for control in adapters/*/src/deb/control/control; do
+                      [ -f "$control" ] || continue
+                      tool="${control#adapters/}"
+                      tool="${tool%%/*}"
+                      pairs+=("$tool" "$(only "adapters/$tool"/target/*.deb)" "$(only "adapters/$tool"/target/*.rpm)")
+                  done
+                  [ "${#pairs[@]}" -gt 0 ] || { echo "::error::no adapter's package was found to publish"; exit 1; }
                   # Asked of the store, not the index, which lags an upload. A published release is never replaced, and an
                   # answer other than there or not there stops the release.
                   absent() {
@@ -257,9 +274,12 @@ jobs:
                           *) echo "::error::$1 answered $status: it is published already, or that is unknown"; exit 1 ;;
                       esac
                   }
+                  # All are asked before any is sent, so one adapter published already sends none of the others.
                   if [ "$CHANNEL" = releases ]; then
-                      absent "porelo-dist-deb/pool/main/p/porelo-ecosystem-maven/$(basename "$deb")"
-                      absent "porelo-dist-rpm/${CHANNEL}/$(basename "$rpm")"
+                      for ((i = 0; i < ${#pairs[@]}; i += 3)); do
+                          absent "porelo-dist-deb/pool/main/p/porelo-ecosystem-${pairs[i]}/$(basename "${pairs[i + 1]}")"
+                          absent "porelo-dist-rpm/${CHANNEL}/$(basename "${pairs[i + 2]}")"
+                      done
                   fi
                   # Assigned first, so a checksum that cannot be computed stops here instead of sending an empty header,
                   # which curl drops. Only a 2xx is an upload: curl's -f passes a redirect, which put does not follow, so
@@ -278,9 +298,11 @@ jobs:
                           *) echo "::error::Artifactory answered $status to the upload of $(basename "$1"), not a 2xx"; exit 1 ;;
                       esac
                   }
-                  put "$deb" "porelo-dist-deb/pool/main/p/porelo-ecosystem-maven/" \
-                      "deb.distribution=${CHANNEL};deb.component=main;deb.architecture=amd64"
-                  put "$rpm" "porelo-dist-rpm/${CHANNEL}/"
+                  for ((i = 0; i < ${#pairs[@]}; i += 3)); do
+                      put "${pairs[i + 1]}" "porelo-dist-deb/pool/main/p/porelo-ecosystem-${pairs[i]}/" \
+                          "deb.distribution=${CHANNEL};deb.component=main;deb.architecture=amd64"
+                      put "${pairs[i + 2]}" "porelo-dist-rpm/${CHANNEL}/"
+                  done
 
             # Uploaded is not installable: indexing is asynchronous and fails silently. Read anonymously, as an installer
             # sees it, and it must name the very file just uploaded: yesterday's build in the index would pass otherwise.
@@ -292,27 +314,40 @@ jobs:
               run: |
                   set -euo pipefail
                   base="${JF_URL%/}/artifactory"
-                  deb="$(basename adapters/maven/target/*.deb)"
-                  rpm="$(basename adapters/maven/target/*.rpm)"
+                  only() {
+                      [ "$#" = 1 ] && [ -f "$1" ] || { echo "::error::expected one package, matched: $*" >&2; exit 1; }
+                      echo "$1"
+                  }
                   indexed() {
                       local packages location primary
                       packages="$(curl -sSfL --retry 5 --retry-all-errors --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-deb/dists/${CHANNEL}/main/binary-amd64/Packages")" || return 1
-                      grep -qxF "Filename: pool/main/p/porelo-ecosystem-maven/$deb" <<< "$packages" || return 1
+                      grep -qxF "Filename: pool/main/p/porelo-ecosystem-$1/$2" <<< "$packages" || return 1
                       location="$(curl -sSfL --retry 5 --retry-all-errors --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-rpm/${CHANNEL}/repodata/repomd.xml" \
                           | sed -n 's/.*<location href="\([^"]*primary.xml.gz\)".*/\1/p' | head -1)" || return 1
                       [ -n "$location" ] || return 1
                       primary="$(curl -sSfL --retry 5 --retry-all-errors --proto =https --proto-redir =https --max-time 20 "$base/porelo-dist-rpm/${CHANNEL}/$location" | gunzip)" || return 1
-                      grep -qF "$rpm" <<< "$primary"
+                      grep -qF "$3" <<< "$primary"
                   }
-                  for attempt in $(seq 1 20); do
-                      if indexed; then
-                          echo "indexed: $deb and $rpm"
-                          exit 0
-                      fi
-                      sleep 6
+                  probed=0
+                  for control in adapters/*/src/deb/control/control; do
+                      [ -f "$control" ] || continue
+                      tool="${control#adapters/}"
+                      tool="${tool%%/*}"
+                      deb="$(basename "$(only "adapters/$tool"/target/*.deb)")"
+                      rpm="$(basename "$(only "adapters/$tool"/target/*.rpm)")"
+                      found=false
+                      for attempt in $(seq 1 20); do
+                          if indexed "$tool" "$deb" "$rpm"; then
+                              echo "indexed: $deb and $rpm"
+                              found=true
+                              break
+                          fi
+                          sleep 6
+                      done
+                      [ "$found" = true ] || { echo "::error::$deb or $rpm is uploaded but not indexed after 20 reads"; exit 1; }
+                      probed=$((probed + 1))
                   done
-                  echo "::error::$deb or $rpm is uploaded but not indexed after 20 reads"
-                  exit 1
+                  [ "$probed" -gt 0 ] || { echo "::error::no adapter's package was found to probe"; exit 1; }
 
             # Even after a failure, so what the job fetched is not asked of Central again.
             - if: always()

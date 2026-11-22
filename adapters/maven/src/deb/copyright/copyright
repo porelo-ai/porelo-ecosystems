@@ -14,6 +14,7 @@ Comment: This executable is compiled whole from the program, the libraries
  full license and notice texts of each library and of the runtime stand in
  /usr/share/doc/porelo-ecosystem-maven/THIRD-PARTY-NOTICES.
  .
+  porelo-ecosystem-shared (GPL-3.0-or-later, the part every adapter shares)
   porelo-wire (Apache-2.0)
   porelo-ecosystem-api (Apache-2.0)
   maven-model-builder (Apache-2.0)

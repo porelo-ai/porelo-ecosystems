@@ -42,6 +42,11 @@ import org.apache.maven.model.profile.activation.FileProfileActivator;
 import org.apache.maven.model.profile.activation.ProfileActivator;
 import org.apache.maven.model.profile.activation.PropertyProfileActivator;
 import org.apache.maven.model.root.RootLocator;
+import org.fuin.porelo.ecosystem.shared.Origin;
+import org.fuin.porelo.ecosystem.shared.OwnFile;
+import org.fuin.porelo.ecosystem.shared.Place;
+import org.fuin.porelo.ecosystem.shared.UnknownValue;
+import org.fuin.porelo.ecosystem.shared.Unplaced;
 import org.jspecify.annotations.Nullable;
 
 /**

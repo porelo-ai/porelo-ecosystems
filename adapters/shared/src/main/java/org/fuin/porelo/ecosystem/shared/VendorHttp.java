@@ -1,4 +1,4 @@
-package org.fuin.porelo.ecosystem.maven;
+package org.fuin.porelo.ecosystem.shared;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -26,13 +26,16 @@ import org.fuin.porelo.ecosystem.api.EcosystemProtocol;
  * The one place in the adapter that opens a connection. One instance serves one call: its limit
  * runs from when it is made.
  */
-final class VendorHttp implements ToolDownloads.Fetch, AutoCloseable {
+public final class VendorHttp implements VendorFetch, AutoCloseable {
     private static final Duration PER_REQUEST =
             Duration.ofSeconds(EcosystemProtocol.RESOLVE_REQUEST_SECONDS);
     private static final Duration PER_CALL =
             Duration.ofSeconds(EcosystemProtocol.RESOLVE_CALL_SECONDS);
-    static final int MOST_BYTES = 16 * 1024 * 1024;
 
+    /** The most an answer may hold. */
+    public static final int MOST_BYTES = 16 * 1024 * 1024;
+
+    private final String agent;
     private final HttpClient client;
     private final Duration perRequest;
     private final long deadline;
@@ -40,14 +43,16 @@ final class VendorHttp implements ToolDownloads.Fetch, AutoCloseable {
     /**
      * Connects as the person's own settings say.
      *
+     * @param agent The adapter's package name, which a vendor reads as who asks.
      * @param proxies The proxy variables passed in, by name; never read from the environment.
      * @throws ToolUnavailable when a proxy variable cannot be read
      */
-    VendorHttp(Map<String, String> proxies) {
-        this(proxies, PER_REQUEST, PER_CALL);
+    public VendorHttp(String agent, Map<String, String> proxies) {
+        this(agent, proxies, PER_REQUEST, PER_CALL);
     }
 
-    VendorHttp(Map<String, String> proxies, Duration perRequest, Duration perCall) {
+    VendorHttp(String agent, Map<String, String> proxies, Duration perRequest, Duration perCall) {
+        this.agent = agent;
         this.perRequest = perRequest;
         this.deadline = System.nanoTime() + perCall.toNanos();
         this.client =
@@ -68,7 +73,7 @@ final class VendorHttp implements ToolDownloads.Fetch, AutoCloseable {
         HttpRequest request =
                 HttpRequest.newBuilder(uri)
                         .timeout(perRequest)
-                        .header("User-Agent", "porelo-ecosystem-maven")
+                        .header("User-Agent", agent)
                         .GET()
                         .build();
         CompletableFuture<HttpResponse<byte[]>> exchange =

@@ -1,4 +1,4 @@
-package org.fuin.porelo.ecosystem.maven;
+package org.fuin.porelo.ecosystem.shared;
 
 import java.net.URI;
 import java.util.Locale;
@@ -14,14 +14,14 @@ import java.util.regex.Pattern;
  * @param digest Its hex digest, from the same source as the archive.
  * @param mirror The host of the person's mirror it may come from instead, or empty.
  */
-record ToolDownload(String version, String url, String digest, String mirror) {
+public record ToolDownload(String version, String url, String digest, String mirror) {
     private static final Set<String> HOSTS = Set.of("github.com", "repo.maven.apache.org");
     private static final Pattern VERSION = Pattern.compile("[0-9A-Za-z][0-9A-Za-z.+_-]{0,39}");
     private static final Pattern URL = Pattern.compile("[0-9A-Za-z.~%/+:_-]{1,300}");
     private static final Pattern DIGEST = Pattern.compile("[0-9a-f]{64}|[0-9a-f]{128}");
 
     /** Takes what a vendor answered only when each part holds what it should. */
-    ToolDownload {
+    public ToolDownload {
         if (!VERSION.matcher(version).matches()) {
             throw new ToolUnavailable("a version that is no plain version");
         }
@@ -33,13 +33,23 @@ record ToolDownload(String version, String url, String digest, String mirror) {
         }
     }
 
-    /** An archive from a vendor's own host. */
-    ToolDownload(String version, String url, String digest) {
+    /**
+     * An archive from a vendor's own host.
+     *
+     * @param version The exact version.
+     * @param url Where it is fetched from.
+     * @param digest Its hex digest.
+     */
+    public ToolDownload(String version, String url, String digest) {
         this(version, url, digest, "");
     }
 
-    /** The command that checks this digest. */
-    String checkCommand() {
+    /**
+     * The command that checks this digest.
+     *
+     * @return {@code sha256sum} or {@code sha512sum}
+     */
+    public String checkCommand() {
         return digest.length() == 64 ? "sha256sum" : "sha512sum";
     }
 

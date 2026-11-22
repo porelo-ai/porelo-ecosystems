@@ -20,6 +20,13 @@ import org.fuin.porelo.ecosystem.api.Extension;
 import org.fuin.porelo.ecosystem.api.File;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.api.Repository;
+import org.fuin.porelo.ecosystem.shared.Answers;
+import org.fuin.porelo.ecosystem.shared.Place;
+import org.fuin.porelo.ecosystem.shared.ToolUnavailable;
+import org.fuin.porelo.ecosystem.shared.UnknownValue;
+import org.fuin.porelo.ecosystem.shared.Unplaced;
+import org.fuin.porelo.ecosystem.shared.VendorFetch;
+import org.fuin.porelo.ecosystem.shared.VendorHttp;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -30,19 +37,22 @@ public final class MavenEcosystem implements Ecosystem {
     /** The name its executable is installed under. */
     public static final String NAME = "maven";
 
+    // A vendor reads it as who asks.
+    private static final String PACKAGE = "porelo-ecosystem-" + NAME;
+
     private static final String VERSION_RESOURCE = "version.properties";
 
     private final Function<String, @Nullable String> environment;
-    private final Function<Map<String, String>, ToolDownloads.Fetch> vendors;
+    private final Function<Map<String, String>, VendorFetch> vendors;
 
     /** The adapter as it is installed: its environment holds what Porelo passed for the call. */
     public MavenEcosystem() {
-        this(System::getenv, VendorHttp::new);
+        this(System::getenv, proxies -> new VendorHttp(PACKAGE, proxies));
     }
 
     MavenEcosystem(
             Function<String, @Nullable String> environment,
-            Function<Map<String, String>, ToolDownloads.Fetch> vendors) {
+            Function<Map<String, String>, VendorFetch> vendors) {
         this.environment = environment;
         this.vendors = vendors;
     }
@@ -137,7 +147,7 @@ public final class MavenEcosystem implements Ecosystem {
                 proxies.put(name, value);
             }
         }
-        ToolDownloads.Fetch fetch;
+        VendorFetch fetch;
         try {
             fetch = vendors.apply(proxies);
         } catch (ToolUnavailable e) {
@@ -148,7 +158,7 @@ public final class MavenEcosystem implements Ecosystem {
                     };
         }
         try {
-            return Optional.of(new ToolResolver(new ToolDownloads(fetch)).resolve(findings));
+            return Optional.of(new ToolResolver(fetch).resolve(findings));
         } finally {
             if (fetch instanceof VendorHttp http) {
                 http.close();
@@ -220,7 +230,7 @@ public final class MavenEcosystem implements Ecosystem {
                         && (host.kind() == RepositoryHost.Kind.REPOSITORY
                                 || host.kind() == RepositoryHost.Kind.PLUGIN_REPOSITORY)
                         && withoutEndSlash(host.url())
-                                .equals(withoutEndSlash(ToolDownloads.CENTRAL));
+                                .equals(withoutEndSlash(MavenDownloads.CENTRAL));
         return (builtIn ? "Maven's built-in " : "") + what + host.id() + " at " + host.url();
     }
 
