@@ -13,6 +13,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.function.BiConsumer;
 import java.util.regex.Matcher;
@@ -42,6 +43,7 @@ import org.apache.maven.model.profile.activation.FileProfileActivator;
 import org.apache.maven.model.profile.activation.ProfileActivator;
 import org.apache.maven.model.profile.activation.PropertyProfileActivator;
 import org.apache.maven.model.root.RootLocator;
+import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.shared.Origin;
 import org.fuin.porelo.ecosystem.shared.OwnFile;
 import org.fuin.porelo.ecosystem.shared.Place;
@@ -118,7 +120,16 @@ public final class RepositoryHosts {
         Path absoluteHome = home.toAbsolutePath();
         Path absoluteCheckout = checkout.toAbsolutePath();
         MavenOptions options = MavenOptions.read(absoluteCheckout);
+        // Maven reads only the file -s names: the config's, else the one the checkout's workflow
+        // passes.
         String named = options.settings();
+        if (named == null) {
+            named =
+                    OwnSettings.of(absoluteCheckout, options)
+                            .finding()
+                            .map(Finding::value)
+                            .orElse(null);
+        }
         Path settingsFile =
                 named == null
                         ? absoluteHome.resolve(".m2").resolve("settings.xml")
@@ -224,7 +235,10 @@ public final class RepositoryHosts {
                                                 unreadValue.what(),
                                                 unreadValue.why(),
                                                 unreadValue.place())));
-        settings.unknowns()
+        Set<String> decided = new HashSet<>();
+        decidedProfiles().forEach(profile -> decided.add(profile.getId()));
+        settings.unknowns().stream()
+                .filter(condition -> !decided.contains(condition.profile()))
                 .forEach(
                         condition ->
                                 unknowns.add(
@@ -349,6 +363,19 @@ public final class RepositoryHosts {
         return List.of();
     }
 
+    // A settings profile whose conditions only the checkout decides: Maven's selector decides it.
+    private List<Profile> decidedProfiles() {
+        // -P names a settings profile too, and turns it on whatever its conditions say.
+        return settings.idleProfiles().stream()
+                .filter(
+                        profile ->
+                                options.activeProfiles().contains(profile.getId())
+                                        || profile.getActivation() != null
+                                                && machineCondition.of(profile.getActivation())
+                                                        == null)
+                .toList();
+    }
+
     private ModelBuildingRequest request(Path pom) {
         var request = new DefaultModelBuildingRequest();
         // Below this level the builder takes no property given to Maven.
@@ -358,12 +385,19 @@ public final class RepositoryHosts {
         request.setTwoPhaseBuilding(true);
         request.setLocationTracking(true);
         // Only what the checkout gives the build: the rest of the machine is for where it runs.
-        request.setSystemProperties(options.system());
+        Properties system = new Properties();
+        system.putAll(options.system());
+        // Maven's launcher sets it to the directory holding .mvn, which is the checkout's root.
+        system.setProperty("maven.multiModuleProjectDirectory", places.checkout().toString());
+        request.setSystemProperties(system);
         request.setUserProperties(options.user());
         request.setPomFile(pom.toFile());
         request.setModelSource(new FileModelSource(pom.toFile()));
         // The builder fills these in where they stand, and the next pom must see them as written.
-        request.setProfiles(settings.activeProfiles().stream().map(Profile::clone).toList());
+        request.setProfiles(
+                Stream.concat(settings.activeProfiles().stream(), decidedProfiles().stream())
+                        .map(Profile::clone)
+                        .toList());
         List<String> active = new ArrayList<>(settings.activeProfileIds());
         active.addAll(options.activeProfiles());
         request.setActiveProfileIds(active);

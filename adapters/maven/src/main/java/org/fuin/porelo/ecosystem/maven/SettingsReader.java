@@ -22,6 +22,9 @@ import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import org.apache.maven.model.Activation;
+import org.apache.maven.model.ActivationFile;
+import org.apache.maven.model.ActivationOS;
+import org.apache.maven.model.ActivationProperty;
 import org.apache.maven.model.InputLocation;
 import org.apache.maven.model.InputSource;
 import org.apache.maven.model.Profile;
@@ -324,6 +327,32 @@ final class SettingsReader {
         }
         if (parent.equals(activation) && CONDITIONS.contains(name)) {
             draft.conditions.add(name);
+            if (name.equals("jdk")) {
+                draft.activation().setJdk(text(reader));
+                return true;
+            }
+            if (name.equals("os")) {
+                draft.activation().setOs(new ActivationOS());
+            }
+        }
+        // Maven decides a property's or a file's condition itself, from what the checkout gives it.
+        if (parent.equals(activation + "/property")) {
+            ActivationProperty property = draft.property();
+            if (name.equals("name")) {
+                property.setName(text(reader));
+            } else if (name.equals("value")) {
+                property.setValue(text(reader));
+            }
+            return true;
+        }
+        if (parent.equals(activation + "/file")) {
+            ActivationFile file = draft.file();
+            if (name.equals("exists")) {
+                file.setExists(text(reader));
+            } else if (name.equals("missing")) {
+                file.setMissing(text(reader));
+            }
+            return true;
         }
         return false;
     }
@@ -540,6 +569,7 @@ final class SettingsReader {
         int line;
         boolean activeByDefault;
         final List<String> conditions = new ArrayList<>();
+        @Nullable Activation activation;
         final Map<String, String> properties = new LinkedHashMap<>();
         // The model builder carries these into the pom's model, which names where a value is set.
         @Nullable InputLocation propertiesLocation;
@@ -553,15 +583,37 @@ final class SettingsReader {
             propertiesLocation.setLocation(name, at);
         }
 
+        Activation activation() {
+            if (activation == null) {
+                activation = new Activation();
+            }
+            return activation;
+        }
+
+        ActivationProperty property() {
+            if (activation().getProperty() == null) {
+                activation().setProperty(new ActivationProperty());
+            }
+            return java.util.Objects.requireNonNull(activation().getProperty());
+        }
+
+        ActivationFile file() {
+            if (activation().getFile() == null) {
+                activation().setFile(new ActivationFile());
+            }
+            return java.util.Objects.requireNonNull(activation().getFile());
+        }
+
         Profile toProfile() {
             Profile result = new Profile();
             result.setId(id);
             // Its id named nowhere: a pom's profile of the same id stays as it is.
             result.setSource(Profile.SOURCE_SETTINGS);
             if (activeByDefault) {
-                Activation activation = new Activation();
-                activation.setActiveByDefault(true);
-                result.setActivation(activation);
+                activation().setActiveByDefault(true);
+            }
+            if (activation != null) {
+                result.setActivation(activation.clone());
             }
             properties.forEach(result::addProperty);
             result.setLocation("properties", propertiesLocation);

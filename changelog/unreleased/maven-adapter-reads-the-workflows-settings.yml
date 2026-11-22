@@ -1,0 +1,2 @@
+title: The Maven adapter reads the repositories of the settings file a workflow passes with -s, and turns on a settings profile whose property and file conditions the checkout meets, as Maven does.
+type: fixed

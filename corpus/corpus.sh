@@ -78,6 +78,11 @@ say "reference: $COMMAND with $VERSION: exit $RC after $(($(date +%s) - START)) 
 }
 git -C "$WORK" reset -q --hard
 git -C "$WORK" clean -qfdx
+# A conf may make the checkout one Porelo has never seen, committed, so the task starts from the same tree.
+if declare -F prepare_checkout >/dev/null; then
+    prepare_checkout "$WORK"
+    say "prepared: $(git -C "$WORK" log -1 --format=%s)"
+fi
 
 # The file by Porelo's real first start: its question, then a yes.
 call FirstStart "$(jq -cn --arg c "$WORK" '{checkout:$c}')" >"$RUN/first-start.json" 2>"$RUN/first-start.err" || {
@@ -116,20 +121,22 @@ say "project: $PROJECT, repository: ${REPOSITORY:-none}"
 grep -E 'install |domains|^ *- ' "$RUN/porelo.yml" | cut -c1-140 | tee -a "$RUN/summary.txt" || true
 
 # The task with the stub.
-TASK=c
+# Its own name, so a record a run before left cannot stand in its way.
+TASK=c$(date -u +%H%M%S)
 [ -n "$REPOSITORY" ] || {
     say "RESULT: the first start added no repository"
     exit 1
 }
 # A task of that name from before is not this run's to remove.
-! podman container exists "porelo-$PROJECT-$TASK" 2>/dev/null || {
-    say "RESULT: a task porelo-$PROJECT-$TASK is there from before"
+! podman container exists "porelo-${PROJECT}_$TASK" 2>/dev/null || {
+    say "RESULT: a task porelo-${PROJECT}_$TASK is there from before"
     exit 1
 }
-CONTAINER=porelo-$PROJECT-$TASK
 START=$(date +%s)
 RC=0
 (cd "$WORK" && timeout 30m porelo task start "$TASK" -p "$PROJECT" -r "$REPOSITORY" --agent stub --attach shell --clearance=deny --detach --no-input --yes) >"$RUN/start.log" 2>&1 || RC=$?
+# The container is named as the start says, never as this script would guess.
+CONTAINER=$(sed -n 's/^container  *//p' "$RUN/start.log" | head -1)
 IMAGE=$(sed -n 's/^task image  *//p' "$RUN/start.log" | head -1)
 say "task start: exit $RC after $(($(date +%s) - START)) s; image ${IMAGE:-none}"
 [ "$RC" = 0 ] || {
@@ -156,6 +163,12 @@ say "environment, exec < > session: $(wc -l <"$RUN/env.diff") difference(s)"
 sed 's/^/  /' "$RUN/env.diff" | tee -a "$RUN/summary.txt"
 # As the session has it: each build runs in the environment read from it.
 grep -E '^[A-Za-z_][A-Za-z0-9_]*=' "$RUN/session.env" | grep -vE '^(TMUX|TMUX_PANE|_|SHLVL|OLDPWD|PWD)=' >"$RUN/session.env.clean" || true
+# And as the session's user, whom podman exec is not by default.
+SESSION_USER=$(sed -n 's/^USER=//p' "$RUN/session.env" | head -1)
+[[ $SESSION_USER =~ ^[a-z_][a-z0-9_-]*$ ]] || {
+    say "RESULT: the session's user could not be read"
+    exit 1
+}
 
 # A build stopped only by what the conf names as a known gap runs on past it, to see what follows;
 # said in the result, so it never reads as the adapter having built it.
@@ -164,7 +177,7 @@ run_stage() {
     COMMAND=$(build_command "$WORK" "$1")
     START=$(date +%s)
     RC=0
-    timeout "${CORPUS_MINUTES:-60}m" podman exec -w /workspace --env-file "$RUN/session.env.clean" "${PAST_GAP[@]}" "$CONTAINER" sh -c "$COMMAND" >"$RUN/build-$1.log" 2>&1 || RC=$?
+    timeout "${CORPUS_MINUTES:-60}m" podman exec --user "$SESSION_USER" -w /workspace --env-file "$RUN/session.env.clean" "${PAST_GAP[@]}" "$CONTAINER" sh -c "$COMMAND" >"$RUN/build-$1.log" 2>&1 || RC=$?
     say "build $1${PAST_GAP:+ (past the known gap)}: $COMMAND: exit $RC after $(($(date +%s) - START)) s"
     grep -E 'ERROR|BUILD|not found|Tests run:.*Fail' "$RUN/build-$1.log" | tail -6 | cut -c1-170 | sed 's/^/  /' | tee -a "$RUN/summary.txt" || true
 }

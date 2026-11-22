@@ -1,0 +1,13 @@
+# name url reference-JDK commit: Porelo's own Maven repositories, each at the main commit it was measured at.
+porelo https://github.com/porelo-ai/porelo.git 25 ce8fa38
+porelo-adapters https://github.com/porelo-ai/porelo-adapters.git 25 92066f4
+porelo-agy https://github.com/porelo-ai/porelo-agy.git 25 20f8db9
+porelo-buildtools https://github.com/porelo-ai/porelo-buildtools.git 25 33e7769
+porelo-claude-code https://github.com/porelo-ai/porelo-claude-code.git 25 6655e5d
+porelo-codex https://github.com/porelo-ai/porelo-codex.git 25 a7044af
+porelo-frontend https://github.com/porelo-ai/porelo-frontend.git 25 e92c16f
+porelo-message-matrix https://github.com/porelo-ai/porelo-message-matrix.git 25 0535729
+porelo-message-sluice https://github.com/porelo-ai/porelo-message-sluice.git 25 c4533e4
+porelo-omp https://github.com/porelo-ai/porelo-omp.git 25 9db80b4
+porelo-parent https://github.com/porelo-ai/porelo-parent.git 25 8c70e52
+porelo-pi https://github.com/porelo-ai/porelo-pi.git 25 a50d8a1

@@ -53,7 +53,12 @@ final class MachineCondition implements ProfileActivator {
             conditions.add("the operating system");
         }
         ActivationProperty property = activation.getProperty();
-        if (property != null && isOfTheMachine(String.valueOf(property.getName()))) {
+        // A ${...} still standing is filled in from where the build runs, as Maven reads the
+        // settings.
+        if (property != null
+                && (isOfTheMachine(String.valueOf(property.getName()))
+                        || String.valueOf(property.getName()).contains("${")
+                        || String.valueOf(property.getValue()).contains("${"))) {
             conditions.add("the property " + property.getName());
         }
         ActivationFile file = activation.getFile();
@@ -75,7 +80,8 @@ final class MachineCondition implements ProfileActivator {
         }
         String path =
                 file.replace("${basedir}", checkout.toString())
-                        .replace("${project.basedir}", checkout.toString());
+                        .replace("${project.basedir}", checkout.toString())
+                        .replace("${maven.multiModuleProjectDirectory}", checkout.toString());
         return !path.contains("${") && checkout.resolve(path).normalize().startsWith(checkout);
     }
 }

@@ -2659,6 +2659,103 @@ class MavenEcosystemTest {
             assertThat(configured()).isEmpty();
         }
 
+        @Test
+        void theHostsOfASettingsFileAWorkflowNamesAreTheBuilds() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom("build/settings.xml", CHECKED_IN)
+                    .pom(
+                            ".github/workflows/build.yml",
+                            STEPS + "      - run: ./mvnw -B -s build/settings.xml verify\n");
+
+            assertThat(detect().findings())
+                    .as("the task reads this file, so its repositories must be reachable")
+                    .anyMatch(x -> x.key().equals("host.repo.example.org"));
+        }
+
+        @Test
+        void aSettingsProfileTheCheckoutTurnsOnByPropertyAndFileIsTheBuilds() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            "settings.xml",
+                            """
+                            <settings><profiles><profile><id>standard</id>
+                              <activation>
+                                <property><name>filter</name><value>true</value></property>
+                                <file><exists>${maven.multiModuleProjectDirectory}/.mvn/rrf/on.txt</exists></file>
+                              </activation>
+                              <repositories><repository><id>snapshots</id>
+                                <url>https://snapshots.example.org/maven</url></repository></repositories>
+                            </profile></profiles></settings>
+                            """)
+                    .pom(".mvn/rrf/on.txt", "org.example\n")
+                    .pom(".mvn/maven.config", "-Dfilter=true\n-s\nsettings.xml\n");
+
+            assertThat(detect().findings())
+                    .as("both conditions stand in the checkout, so Maven turns the profile on")
+                    .anyMatch(x -> x.key().equals("host.snapshots.example.org"))
+                    .noneMatch(x -> x.key().equals("profile standard"));
+        }
+
+        @Test
+        void aSettingsProfileWhosePropertyTheCheckoutDoesNotSetStaysOff() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            "settings.xml",
+                            """
+                            <settings><profiles><profile><id>standard</id>
+                              <activation>
+                                <property><name>filter</name><value>true</value></property>
+                              </activation>
+                              <repositories><repository><id>snapshots</id>
+                                <url>https://snapshots.example.org/maven</url></repository></repositories>
+                            </profile></profiles></settings>
+                            """)
+                    .pom(".mvn/maven.config", "-s\nsettings.xml\n");
+
+            assertThat(detect().findings())
+                    .as("Maven leaves it off, so no host of it is opened")
+                    .noneMatch(x -> x.key().equals("host.snapshots.example.org"));
+        }
+
+        @Test
+        void aSettingsProfileWhoseConditionTheMachineFillsInIsNamed() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            "settings.xml",
+                            """
+                            <settings><profiles><profile><id>stage</id>
+                              <activation>
+                                <property><name>stage</name><value>${env.STAGE}</value></property>
+                              </activation>
+                              <repositories><repository><id>staged</id>
+                                <url>https://staged.example.org/maven</url></repository></repositories>
+                            </profile></profiles></settings>
+                            """)
+                    .pom(".mvn/maven.config", "-Dstage=prod\n-s\nsettings.xml\n");
+
+            assertThat(detect().findings())
+                    .as("where the build runs decides it, so it is named, never left unsaid")
+                    .anyMatch(x -> x.key().equals("unknown.profile stage") && x.unknown());
+        }
+
+        @Test
+        void aSettingsProfileTheConfigTurnsOnByIdIsTheBuilds() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            "settings.xml",
+                            """
+                            <settings><profiles><profile><id>corp</id>
+                              <repositories><repository><id>inhouse</id>
+                                <url>https://corp.example.org/maven</url></repository></repositories>
+                            </profile></profiles></settings>
+                            """)
+                    .pom(".mvn/maven.config", "-s\nsettings.xml\n-Pcorp\n");
+
+            assertThat(detect().findings())
+                    .as("-P turns the settings' profile on, as Maven does")
+                    .anyMatch(x -> x.key().equals("host.corp.example.org"));
+        }
+
         @ParameterizedTest
         @ValueSource(strings = {"none", "outside", "missing"})
         void withoutACheckedInFileTheGeneratedOneStandsIn(String which) throws IOException {

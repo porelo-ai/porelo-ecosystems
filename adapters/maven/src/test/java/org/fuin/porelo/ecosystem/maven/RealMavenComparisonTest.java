@@ -184,6 +184,9 @@ class RealMavenComparisonTest {
                         .redirectOutput(log.toFile());
         builder.environment().remove("MAVEN_PROJECTBASEDIR");
         builder.environment().remove("MAVEN_ARGS");
+        // Neither the machine's ~/.mavenrc nor its options may move the fixture's local repository.
+        builder.environment().remove("MAVEN_OPTS");
+        builder.environment().put("MAVEN_SKIP_RC", "true");
         int exit = builder.start().waitFor();
         assertThat(exit).as("real Maven must answer: %s", Files.readString(log)).isZero();
         try (Reader reader = Files.newBufferedReader(output)) {
