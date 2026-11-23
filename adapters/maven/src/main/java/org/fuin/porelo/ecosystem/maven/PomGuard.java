@@ -27,12 +27,10 @@ import org.jspecify.annotations.Nullable;
 /** The one place every pom is read: nothing passes it outside its bounds. */
 final class PomGuard implements ModelProcessor {
     static final int MAX_POM_BYTES = 4 * 1024 * 1024;
-    static final int MAX_POM_READS = 20_000;
 
     private final ModelProcessor delegate;
     private final Places places;
     private final List<UnknownValue> refusals = new ArrayList<>();
-    private int reads;
 
     PomGuard(ModelProcessor delegate, Places places) {
         this.delegate = delegate;
@@ -88,9 +86,6 @@ final class PomGuard implements ModelProcessor {
     }
 
     private byte[] readBounded(InputStream in, ModelSource source) throws IOException {
-        if (++reads > MAX_POM_READS) {
-            throw refuse(source, "more than " + MAX_POM_READS + " poms were read");
-        }
         byte[] bytes = in.readNBytes(MAX_POM_BYTES + 1);
         if (bytes.length > MAX_POM_BYTES) {
             throw refuse(source, "it is larger than " + MAX_POM_BYTES + " bytes");

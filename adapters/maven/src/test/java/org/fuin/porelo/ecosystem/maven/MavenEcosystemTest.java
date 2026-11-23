@@ -3322,20 +3322,6 @@ class MavenEcosystemTest {
             assertThat(notesOn(".github/workflows/old.yml")).as("not a workflow").isEmpty();
         }
 
-        /** Harm prevented: links out of the checkout lift the limit of workflows read. */
-        @Test
-        void aLinkedWorkflowCountsAgainstTheLimit() throws IOException {
-            Path outside = f.home.resolve("w.yml");
-            Files.writeString(outside, "on: push\n");
-            workflow("w64.yml", "      - run: mvn -s settings.xml\n");
-            Files.createSymbolicLink(f.checkout.resolve(".github/workflows/w00.yml"), outside);
-            for (int i = 1; i < 64; i++) {
-                f.pom(".github/workflows/w%02d.yml".formatted(i), "on: push\n");
-            }
-
-            assertThat(notesOn(".github/workflows/w64.yml")).as("the 65th named").hasSize(1);
-        }
-
         /**
          * Harm prevented: the notes on what was not followed come in an order no one can follow.
          */
@@ -3405,19 +3391,22 @@ class MavenEcosystemTest {
                     .noneMatch(x -> x.key().equals("extension.ownSettings"));
         }
 
+        /** Harm prevented: a large project's build gets a generated settings file it never uses. */
         @Test
-        void workflowsPastTheLimitAreNamed() throws IOException {
+        void everyWorkflowIsReadHoweverMany() throws IOException {
             f.pom("pom.xml", project("child", ""));
-            for (int i = 0; i < 64; i++) {
-                f.pom(".github/workflows/w%02d.yml".formatted(i), "on: push\n");
+            for (int i = 0; i < 200; i++) {
+                f.pom(".github/workflows/w%03d.yml".formatted(i), "on: push\n");
             }
             f.pom("settings.xml", CHECKED_IN)
-                    .pom(".github/workflows/w64.yml", STEPS + "      - run: mvn -s settings.xml\n");
+                    .pom(
+                            ".github/workflows/w200.yml",
+                            STEPS + "      - run: mvn -s settings.xml\n");
 
-            assertThat(notesOn(".github/workflows/w64.yml")).as("the 65th named").hasSize(1);
-            assertThat(detect().findings())
-                    .as("the 65th not read")
-                    .noneMatch(x -> x.key().equals("extension.ownSettings"));
+            assertThat(notesOn(".github/workflows/w200.yml")).as("not passed over").isEmpty();
+            assertThat(only("extension.ownSettings").file())
+                    .as("the 201st read")
+                    .isEqualTo(".github/workflows/w200.yml");
         }
 
         /** Harm prevented: a file outside the checkout is read as the checkout's workflow. */

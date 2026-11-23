@@ -1,0 +1,2 @@
+title: The Maven adapter reads any number of poms and of workflow files, where it refused a checkout past 20,000 poms and passed over every workflow after the 64th; it asks GitHub for GraalVM's releases five at a time until the asked major is found, so a page holding as many assets as GitHub allows is not refused by its 16 MiB bound on one answer.
+type: changed

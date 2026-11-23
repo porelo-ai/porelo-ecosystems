@@ -21,6 +21,9 @@ public final class JdkDownloads {
             Pattern.compile(
                     "graalvm-community-jdk-(?:(\\d{1,4})i\\d+-)?((\\d{1,4})(?:\\.[0-9.]*)?)_linux-x64_bin\\.tar\\.gz");
 
+    // 1000 assets a release, as GitHub allows, under 2 KiB each: five stay under the 16 MiB bound.
+    static final int RELEASES_PER_PAGE = 5;
+
     private final VendorFetch fetch;
 
     /**
@@ -65,13 +68,33 @@ public final class JdkDownloads {
      * @throws ToolUnavailable when none is listed, or the list is refused
      */
     public ToolDownload graalvm(int major) {
+        for (int page = 1; ; page++) {
+            List<?> releases = graalvmReleases(page);
+            Optional<ToolDownload> found = findGraalvm(major, releases);
+            if (found.isPresent()) {
+                return found.get();
+            }
+            if (releases.size() < RELEASES_PER_PAGE) {
+                throw new ToolUnavailable("GraalVM names no release for JDK " + major);
+            }
+        }
+    }
+
+    private List<?> graalvmReleases(int page) {
         URI uri =
                 URI.create(
                         "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases"
-                                + "?per_page=100");
+                                + "?per_page="
+                                + RELEASES_PER_PAGE
+                                + "&page="
+                                + page);
         if (!(parse(uri) instanceof List<?> releases)) {
             throw new ToolUnavailable("GitHub answered no list of GraalVM's releases");
         }
+        return releases;
+    }
+
+    private Optional<ToolDownload> findGraalvm(int major, List<?> releases) {
         for (Object each : releases) {
             Map<?, ?> release = map(each);
             if (Boolean.TRUE.equals(release.get("prerelease"))
@@ -85,14 +108,15 @@ public final class JdkDownloads {
                 if (name.matches()
                         && Integer.parseInt(name.group(1) != null ? name.group(1) : name.group(3))
                                 == major) {
-                    return new ToolDownload(
-                            name.group(2),
-                            text(asset.get("browser_download_url")),
-                            graalvmDigest(asset, assets));
+                    return Optional.of(
+                            new ToolDownload(
+                                    name.group(2),
+                                    text(asset.get("browser_download_url")),
+                                    graalvmDigest(asset, assets)));
                 }
             }
         }
-        throw new ToolUnavailable("GraalVM names no release for JDK " + major);
+        return Optional.empty();
     }
 
     // A release before GitHub named digests holds it in a file of its own beside the archive.

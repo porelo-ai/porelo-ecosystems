@@ -193,7 +193,7 @@ class JdkDownloadsTest {
             String base =
                     "https://github.com/graalvm/graalvm-ce-builds/releases/download/jdk-21.0.2/";
             answers.put(
-                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=100",
+                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1",
                     """
                     [{"prerelease":false,"draft":false,"assets":[
                       {"name":"%1$s","browser_download_url":"%2$s%1$s","digest":null},
@@ -213,7 +213,7 @@ class JdkDownloadsTest {
         void aDigestFileAtNoAddressMakesGraalvmUnknown() {
             String archive = "graalvm-community-jdk-21.0.2_linux-x64_bin.tar.gz";
             answers.put(
-                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=100",
+                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1",
                     """
                     [{"prerelease":false,"draft":false,"assets":[
                       {"name":"%1$s","browser_download_url":"https://github.com/%1$s","digest":null},
@@ -230,7 +230,7 @@ class JdkDownloadsTest {
         @Test
         void aDigestOfAnotherKindIsRefused() {
             answers.put(
-                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=100",
+                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1",
                     """
                     [{"prerelease":false,"draft":false,"assets":[
                       {"name":"graalvm-community-jdk-25.0.2_linux-x64_bin.tar.gz",
@@ -246,7 +246,7 @@ class JdkDownloadsTest {
         @Test
         void anAbsurdMajorInANameIsPassedOver() {
             answers.put(
-                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=100",
+                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1",
                     """
                     [{"prerelease":false,"draft":false,"assets":[
                       {"name":"graalvm-community-jdk-99999999999999_linux-x64_bin.tar.gz",
@@ -259,7 +259,7 @@ class JdkDownloadsTest {
         }
 
         private static final String RELEASES =
-                "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=100";
+                "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1";
 
         private String release(boolean prerelease, String asset) {
             return """
@@ -321,6 +321,41 @@ class JdkDownloadsTest {
                     .isEqualTo("25.0.5");
         }
 
+        private String fullPageOf26() {
+            String one = release(false, "graalvm-community-jdk-26i1-26.0.1_linux-x64_bin.tar.gz");
+            return "[" + String.join(",", java.util.Collections.nCopies(5, one)) + "]";
+        }
+
+        /** Harm prevented: an older major is unknown once newer releases fill one page. */
+        @Test
+        void aMajorOnALaterPageIsFound() {
+            answers.put(RELEASES, fullPageOf26());
+            answers.put(
+                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=2",
+                    "["
+                            + release(
+                                    false, "graalvm-community-jdk-25i5-25.0.5_linux-x64_bin.tar.gz")
+                            + "]");
+
+            assertThat(tools.graalvm(25).version())
+                    .as("found on the second page")
+                    .isEqualTo("25.0.5");
+        }
+
+        /** Harm prevented: a list that ends on a full page is asked for pages without end. */
+        @Test
+        void aFullPageFollowedByAnEmptyOneEndsTheSearch() {
+            answers.put(RELEASES, fullPageOf26());
+            answers.put(
+                    "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=2",
+                    "[]");
+
+            assertThatThrownBy(() -> tools.graalvm(25))
+                    .as("said as none found once GitHub lists no more")
+                    .isInstanceOf(ToolUnavailable.class)
+                    .hasMessage("GraalVM names no release for JDK 25");
+        }
+
         @Test
         void aRateLimitsRefusalLeavesItUnavailable() {
             answers.put(RELEASES, "{\"message\":\"API rate limit exceeded\"}");
@@ -335,7 +370,7 @@ class JdkDownloadsTest {
     @Nested
     class VendorAnswers {
         private static final String RELEASES =
-                "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=100";
+                "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1";
 
         @Test
         void anAnswerLongerThanSnakeYamlsDefaultIsReadWhole() {

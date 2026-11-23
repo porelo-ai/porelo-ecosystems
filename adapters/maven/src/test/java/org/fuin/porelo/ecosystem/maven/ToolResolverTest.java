@@ -65,7 +65,7 @@ class ToolResolverTest {
 
     private void graalvm(int major) {
         answers.put(
-                "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=100",
+                "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1",
                 """
                 [{"prerelease":false,"draft":false,"assets":[
                   {"name":"graalvm-community-jdk-%di5-%d.0.5_linux-x64_bin.tar.gz",

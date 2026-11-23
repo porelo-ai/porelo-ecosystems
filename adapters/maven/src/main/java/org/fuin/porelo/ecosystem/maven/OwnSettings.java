@@ -46,7 +46,6 @@ final class OwnSettings {
     static final String KEY = "extension.ownSettings";
     private static final String WORKFLOWS = ".github/workflows";
     private static final int MAX_BYTES = 1024 * 1024;
-    private static final int MAX_WORKFLOWS = 64;
     private static final Pattern OWN_REPOSITORY =
             Pattern.compile("\\$\\{\\{\\s*github\\.repository\\s*\\}\\}");
     private static final String NOTE =
@@ -84,18 +83,9 @@ final class OwnSettings {
         }
         Reading reading = new Reading(checkout);
         List<Path> workflows = workflows(checkout, reading.notes);
-        for (int index = 0; index < workflows.size(); index++) {
-            Path workflow = workflows.get(index);
+        for (Path workflow : workflows) {
             String file = checkout.relativize(workflow).toString();
-            if (index >= MAX_WORKFLOWS) {
-                reading.notes.add(
-                        note(
-                                "this workflow is past the "
-                                        + MAX_WORKFLOWS
-                                        + " read"
-                                        + NOT_FOLLOWED,
-                                file));
-            } else if (!ownFile(checkout, workflow)) {
+            if (!ownFile(checkout, workflow)) {
                 reading.notes.add(
                         note(
                                 "this workflow lies outside the checkout, by a link" + NOT_FOLLOWED,

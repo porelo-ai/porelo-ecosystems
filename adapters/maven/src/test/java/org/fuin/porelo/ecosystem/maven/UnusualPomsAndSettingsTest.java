@@ -187,8 +187,8 @@ class UnusualPomsAndSettingsTest {
             RepositoryHostsAnswer answer = f.answer();
 
             assertThat(answer.unknowns())
-                    .as("the limit on reads is not what stops it")
-                    .noneMatch(u -> u.why().contains("poms were read"));
+                    .as("no pom refused for the loop")
+                    .noneMatch(u -> u.why().startsWith("refused"));
             assertThat(hosts(answer)).as("and it answers").contains("r.example.org");
         }
     }
@@ -995,6 +995,23 @@ class UnusualPomsAndSettingsTest {
                 .hasMessageContaining("refused");
 
         assertThat(closed).as("the builder leaves closing to its reader").isTrue();
+    }
+
+    /** Harm prevented: a reactor of some thousand modules is refused as a whole. */
+    @Test
+    void anyNumberOfPomsIsRead() throws IOException {
+        Path pom = Files.writeString(f.checkout.resolve("pom.xml"), project("a", ""));
+        Places places = new Places(f.checkout, f.home, f.home.resolve(".m2/settings.xml"));
+        PomGuard guard = new PomGuard(new DefaultModelBuilderFactoryProbe().processor(), places);
+        byte[] bytes = Files.readAllBytes(pom);
+        Map<String, Object> options =
+                Map.of(ModelProcessor.SOURCE, new FileModelSource(pom.toFile()));
+
+        for (int i = 0; i < 25_000; i++) {
+            guard.read(new ByteArrayInputStream(bytes), options);
+        }
+
+        assertThat(guard.takeRefusals()).as("none refused for their number").isEmpty();
     }
 
     private static final class DefaultModelBuilderFactoryProbe extends DefaultModelBuilderFactory {
