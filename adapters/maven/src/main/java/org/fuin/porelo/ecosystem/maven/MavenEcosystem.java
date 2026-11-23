@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Properties;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
 import org.fuin.porelo.ecosystem.api.Detection;
@@ -27,6 +28,7 @@ import org.fuin.porelo.ecosystem.shared.UnknownValue;
 import org.fuin.porelo.ecosystem.shared.Unplaced;
 import org.fuin.porelo.ecosystem.shared.VendorFetch;
 import org.fuin.porelo.ecosystem.shared.VendorHttp;
+import org.fuin.porelo.wire.LimitFactors;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -43,24 +45,34 @@ public final class MavenEcosystem implements Ecosystem {
     private static final String VERSION_RESOURCE = "version.properties";
 
     private final Function<String, @Nullable String> environment;
-    private final Function<Map<String, String>, VendorFetch> vendors;
+    private final BiFunction<Map<String, String>, LimitFactors, VendorFetch> vendors;
+    private final LimitFactors limits;
 
-    /** The adapter as it is installed: its environment holds what Porelo passed for the call. */
+    /**
+     * The adapter as it is installed: its environment holds what Porelo passed for the call, and
+     * its time limits stand at their defaults until Porelo hands on the factors.
+     */
     public MavenEcosystem() {
-        this(System::getenv, proxies -> new VendorHttp(PACKAGE, proxies));
+        this(
+                System::getenv,
+                (proxies, limits) -> new VendorHttp(PACKAGE, proxies, limits),
+                LimitFactors.DEFAULT);
     }
 
     MavenEcosystem(
             Function<String, @Nullable String> environment,
-            Function<Map<String, String>, VendorFetch> vendors) {
+            BiFunction<Map<String, String>, LimitFactors, VendorFetch> vendors,
+            LimitFactors limits) {
         this.environment = environment;
         this.vendors = vendors;
+        this.limits = limits;
     }
 
     /**
      * Runs the adapter as an executable.
      *
-     * @param arguments {@code describe}, or {@code serve <socket>}
+     * @param arguments {@code describe}, or {@code serve <socket>}, either after {@code --limits
+     *     <line>} when Porelo hands on its factors
      */
     public static void main(String[] arguments) {
         EcosystemMain.run(new MavenEcosystem(), arguments);
@@ -69,6 +81,12 @@ public final class MavenEcosystem implements Ecosystem {
     @Override
     public String ecosystem() {
         return NAME;
+    }
+
+    /** Returns the adapter whose vendors' limits follow these factors' {@code services}. */
+    @Override
+    public Ecosystem withLimits(LimitFactors limits) {
+        return new MavenEcosystem(environment, vendors, limits);
     }
 
     /**
@@ -150,7 +168,7 @@ public final class MavenEcosystem implements Ecosystem {
         }
         VendorFetch fetch;
         try {
-            fetch = vendors.apply(proxies);
+            fetch = vendors.apply(proxies, limits);
         } catch (ToolUnavailable e) {
             // Each tool then says this as why it was not found.
             fetch =

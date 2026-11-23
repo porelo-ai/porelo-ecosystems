@@ -97,6 +97,29 @@ class NativeExecutableIT {
                         });
     }
 
+    /** Harm prevented: the factors Porelo hands on stop the installed adapter, or pass unread. */
+    @Test
+    void theExecutableTakesTheLimitsLineAndRefusesABadOne() throws Exception {
+        Path installed = executable();
+
+        Process good =
+                new ProcessBuilder(installed.toString(), "--limits", "services=2.5", "describe")
+                        .redirectErrorStream(true)
+                        .start();
+        Process bad =
+                new ProcessBuilder(installed.toString(), "--limits", "services=0", "describe")
+                        .redirectErrorStream(true)
+                        .start();
+
+        assertThat(good.waitFor(30, TimeUnit.SECONDS)).as("ends").isTrue();
+        assertThat(good.exitValue()).as("a good line, then the mode").isZero();
+        assertThat(bad.waitFor(30, TimeUnit.SECONDS)).as("ends").isTrue();
+        assertThat(bad.exitValue()).as("refused before anything runs").isEqualTo(64);
+        assertThat(new String(bad.getInputStream().readAllBytes(), StandardCharsets.UTF_8))
+                .as("says which option is wrong")
+                .contains("--limits:");
+    }
+
     /** Harm prevented: the settings a task needs never arrive from the installed adapter. */
     @Test
     void theExecutableWritesTheSettingsAsTheCodeDoes() throws IOException {

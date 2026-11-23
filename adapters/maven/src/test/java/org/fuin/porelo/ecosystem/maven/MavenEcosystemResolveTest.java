@@ -10,6 +10,7 @@ import java.util.Map;
 import java.util.Optional;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.fuin.porelo.ecosystem.shared.VendorHttp;
+import org.fuin.porelo.wire.LimitFactors;
 import org.junit.jupiter.api.Test;
 
 /** What {@code Resolve} hands the vendors' client, and what it answers when that cannot start. */
@@ -27,6 +28,27 @@ class MavenEcosystemResolveTest {
                             Finding.Origin.CHECKOUT,
                             false,
                             "what Detect said"));
+
+    /** Harm prevented: a slow network is met by a new build rather than by one setting. */
+    @Test
+    void theFactorsPoreloHandsOnReachTheVendorsClient() {
+        LimitFactors slow = LimitFactors.parse("services=3");
+        List<LimitFactors> handed = new ArrayList<>();
+
+        new MavenEcosystem(
+                        name -> null,
+                        (proxies, limits) -> {
+                            handed.add(limits);
+                            return uri -> {
+                                throw new IOException("offline");
+                            };
+                        },
+                        LimitFactors.DEFAULT)
+                .withLimits(slow)
+                .resolve(NOWHERE, NOWHERE, ASKED);
+
+        assertThat(handed).as("as --limits named them").containsExactly(slow);
+    }
 
     /** Harm prevented: behind a proxy, no lookup ever reaches a vendor. */
     @Test
@@ -46,12 +68,13 @@ class MavenEcosystemResolveTest {
         Optional<List<Finding>> answered =
                 new MavenEcosystem(
                                 environment::get,
-                                given -> {
+                                (given, limits) -> {
                                     handed.add(given);
                                     return uri -> {
                                         throw new IOException("offline");
                                     };
-                                })
+                                },
+                                LimitFactors.DEFAULT)
                         .resolve(NOWHERE, NOWHERE, ASKED);
 
         assertThat(handed)
@@ -68,7 +91,9 @@ class MavenEcosystemResolveTest {
         List<Finding> answered =
                 new MavenEcosystem(
                                 environment::get,
-                                proxies -> new VendorHttp("porelo-ecosystem-maven", proxies))
+                                (proxies, limits) ->
+                                        new VendorHttp("porelo-ecosystem-maven", proxies, limits),
+                                LimitFactors.DEFAULT)
                         .resolve(NOWHERE, NOWHERE, ASKED)
                         .orElseThrow();
 

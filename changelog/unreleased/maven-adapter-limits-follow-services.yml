@@ -1,0 +1,2 @@
+title: The Maven adapter's limits on asking the vendors, 5 s for one request and 20 s for one call, are multiplied by the services factor Porelo passes, so a slow network is met by one setting.
+type: changed

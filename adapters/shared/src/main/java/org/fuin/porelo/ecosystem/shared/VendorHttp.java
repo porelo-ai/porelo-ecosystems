@@ -21,6 +21,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.fuin.porelo.ecosystem.api.EcosystemProtocol;
+import org.fuin.porelo.wire.LimitFactors;
 
 /**
  * The one place in the adapter that opens a connection. One instance serves one call: its limit
@@ -45,10 +46,12 @@ public final class VendorHttp implements VendorFetch, AutoCloseable {
      *
      * @param agent The adapter's package name, which a vendor reads as who asks.
      * @param proxies The proxy variables passed in, by name; never read from the environment.
+     * @param limits The factors Porelo passed; a request's and a call's limit follow {@code
+     *     services}.
      * @throws ToolUnavailable when a proxy variable cannot be read
      */
-    public VendorHttp(String agent, Map<String, String> proxies) {
-        this(agent, proxies, PER_REQUEST, PER_CALL);
+    public VendorHttp(String agent, Map<String, String> proxies, LimitFactors limits) {
+        this(agent, proxies, limits.services(PER_REQUEST), limits.services(PER_CALL));
     }
 
     VendorHttp(String agent, Map<String, String> proxies, Duration perRequest, Duration perCall) {

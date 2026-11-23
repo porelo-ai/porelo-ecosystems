@@ -14,6 +14,7 @@ import java.net.Socket;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
+import org.fuin.porelo.wire.LimitFactors;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -134,9 +135,88 @@ class VendorHttpTest {
         try {
             URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/from");
 
-            assertThat(new VendorHttp("porelo-ecosystem-test", Map.of()).text(uri))
+            assertThat(
+                            new VendorHttp("porelo-ecosystem-test", Map.of(), LimitFactors.DEFAULT)
+                                    .text(uri))
                     .as("any server may answer with one")
                     .isEqualTo("here");
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    /** Harm prevented: a slow network is met by a new build rather than by one setting. */
+    @Test
+    void theServicesFactorScalesTheRequestsLimit() throws IOException {
+        try (ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            Thread silent =
+                    Thread.ofVirtual()
+                            .start(
+                                    () -> {
+                                        try (Socket client = server.accept()) {
+                                            Thread.sleep(Duration.ofSeconds(30));
+                                        } catch (IOException | InterruptedException e) {
+                                            Thread.currentThread().interrupt();
+                                        }
+                                    });
+            try {
+                VendorHttp http =
+                        new VendorHttp(
+                                "porelo-ecosystem-test",
+                                Map.of(),
+                                LimitFactors.parse("services=0.1"));
+                URI uri = URI.create("http://127.0.0.1:" + server.getLocalPort() + "/");
+                long started = System.nanoTime();
+
+                assertThatThrownBy(() -> http.text(uri)).isInstanceOf(IOException.class);
+                assertThat(Duration.ofNanos(System.nanoTime() - started))
+                        .as("a tenth of the 5 s a request may take, not all of them")
+                        .isLessThan(Duration.ofSeconds(3));
+            } finally {
+                silent.interrupt();
+            }
+        }
+    }
+
+    @Test
+    void theServicesFactorScalesTheCallsLimit() throws IOException {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext(
+                "/",
+                exchange -> {
+                    try {
+                        Thread.sleep(Duration.ofMillis(50));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    exchange.sendResponseHeaders(200, 1);
+                    exchange.getResponseBody().write(new byte[] {'x'});
+                    exchange.close();
+                });
+        server.start();
+        try {
+            VendorHttp http =
+                    new VendorHttp(
+                            "porelo-ecosystem-test", Map.of(), LimitFactors.parse("services=0.1"));
+            URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/");
+            java.util.concurrent.atomic.AtomicInteger answered =
+                    new java.util.concurrent.atomic.AtomicInteger();
+            long started = System.nanoTime();
+
+            assertThatThrownBy(
+                            () -> {
+                                while (true) {
+                                    http.text(uri);
+                                    answered.incrementAndGet();
+                                }
+                            })
+                    .isInstanceOf(IOException.class);
+            assertThat(answered.get())
+                    .as("the requests were answered, so the call's own limit ended it")
+                    .isGreaterThan(5);
+            assertThat(Duration.ofNanos(System.nanoTime() - started))
+                    .as("a tenth of the 20 s a call's requests share, not all of them")
+                    .isLessThan(Duration.ofSeconds(6));
         } finally {
             server.stop(0);
         }
