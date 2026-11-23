@@ -63,21 +63,17 @@ final class MavenExtension {
     }
 
     /**
-     * Whether the checkout holds the settings file its build uses, so the task gets none generated.
+     * Checks the settings file the block names as the checkout's own, if any.
      *
      * @param extension the block as the project holds it
-     * @return true when the block names such a file
      * @throws EcosystemRefused when the path is not one inside the checkout
      */
-    static boolean ownSettings(Extension extension) {
+    static void checkOwnSettings(Extension extension) {
         Object written = extension.values().get(OWN_SETTINGS);
-        if (written == null) {
-            return false;
-        }
-        if (!(written instanceof String path) || !OwnSettings.staysInside(path)) {
+        if (written != null
+                && (!(written instanceof String path) || !OwnSettings.staysInside(path))) {
             throw refused(KEY + "." + OWN_SETTINGS, "is not a path inside the checkout");
         }
-        return true;
     }
 
     private static EcosystemRefused refused(String key, String why) {

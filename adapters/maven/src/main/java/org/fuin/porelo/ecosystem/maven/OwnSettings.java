@@ -40,7 +40,8 @@ import org.yaml.snakeyaml.nodes.SequenceNode;
  * A settings file inside the checkout that the checkout's own build uses: named by {@code -s} in
  * {@code .mvn/maven.config}, or passed with {@code -s} to Maven in a step of a workflow of the
  * checkout, read with the step's shell from the directory it runs in and the path the checkout lies
- * at. The task's Maven then reads it alone, and no settings file is generated for the task.
+ * at. A command naming it reads it alone; a build without {@code -s} reads the settings file
+ * generated for the task, which reaches the same repositories through the broker.
  */
 final class OwnSettings {
     static final String KEY = "extension.ownSettings";
@@ -48,11 +49,14 @@ final class OwnSettings {
     private static final int MAX_BYTES = 1024 * 1024;
     private static final Pattern OWN_REPOSITORY =
             Pattern.compile("\\$\\{\\{\\s*github\\.repository\\s*\\}\\}");
-    private static final String NOTE =
-            "the build uses the settings file checked in here, so Porelo generates none for the"
-                    + " task";
+    private static final String CONFIG_NOTE =
+            "every build reads the settings file checked in here, and its hosts are opened";
+    private static final String WORKFLOW_NOTE =
+            "the workflow's build reads the settings file checked in here, and its hosts are"
+                    + " opened; a build without -s reaches the same repositories through the"
+                    + " settings file Porelo generates for the task";
     private static final String NOT_FOLLOWED =
-            ", so a settings file it may name is not followed and one is generated for the task";
+            ", so a settings file it may name is not followed and the hosts it names are not opened";
 
     private OwnSettings() {}
 
@@ -78,7 +82,13 @@ final class OwnSettings {
             // Maven reads only the file the config names; a workflow's own -s does not apply then.
             return new Answer(
                     inside(checkout, named)
-                            .map(path -> Answers.rule(KEY, path, options.settingsPlace(), NOTE)),
+                            .map(
+                                    path ->
+                                            Answers.rule(
+                                                    KEY,
+                                                    path,
+                                                    options.settingsPlace(),
+                                                    CONFIG_NOTE)),
                     List.of());
         }
         Reading reading = new Reading(checkout);
@@ -219,7 +229,7 @@ final class OwnSettings {
                     continue;
                 }
                 if (taken == null) {
-                    taken = Answers.rule(KEY, path.get(), place, NOTE);
+                    taken = Answers.rule(KEY, path.get(), place, WORKFLOW_NOTE);
                 } else if (!taken.value().equals(path.get()) && beside.add(path.get())) {
                     notes.add(
                             new Unplaced(

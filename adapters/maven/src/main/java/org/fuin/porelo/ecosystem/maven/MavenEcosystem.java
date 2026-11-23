@@ -175,9 +175,8 @@ public final class MavenEcosystem implements Ecosystem {
     @Override
     public List<File> configure(List<Repository> repositories, Extension extension) {
         Map<String, String> mirrorOf = MavenExtension.mirrorOf(extension, repositories);
-        if (MavenExtension.ownSettings(extension)) {
-            return List.of();
-        }
+        // A checked-in file serves only a command that names it; a plain build reads this one.
+        MavenExtension.checkOwnSettings(extension);
         return MavenSettingsFile.of(repositories, mirrorOf);
     }
 

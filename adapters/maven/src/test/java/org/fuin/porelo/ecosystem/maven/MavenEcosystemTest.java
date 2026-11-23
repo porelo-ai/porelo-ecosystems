@@ -2667,8 +2667,8 @@ class MavenEcosystemTest {
     }
 
     /**
-     * Harm prevented: a generated settings file stands beside the one the checkout's build uses, so
-     * the task's build reaches other repositories than the person's own build does.
+     * Harm prevented: the task's build reaches other repositories than the person's own build does,
+     * with the settings file the checkout holds or without it.
      */
     @Nested
     class OwnSettings {
@@ -2689,14 +2689,28 @@ class MavenEcosystemTest {
 
         private List<File> configured() {
             Map<String, Object> block = new java.util.LinkedHashMap<>();
+            // As the project file holds them: a dotted key below the block is a mapping.
             detect().findings().stream()
                     .filter(x -> x.key().startsWith("extension."))
-                    .forEach(x -> block.put(x.key().substring("extension.".length()), x.value()));
+                    .forEach(x -> put(block, x.key().substring("extension.".length()), x.value()));
             return new MavenEcosystem().configure(List.of(INHOUSE), new Extension(block));
         }
 
+        @SuppressWarnings("unchecked")
+        private static void put(Map<String, Object> block, String key, String value) {
+            int dot = key.indexOf('.');
+            if (dot < 0) {
+                block.put(key, value);
+                return;
+            }
+            ((Map<String, Object>)
+                            block.computeIfAbsent(
+                                    key.substring(0, dot), k -> new java.util.LinkedHashMap<>()))
+                    .put(key.substring(dot + 1), value);
+        }
+
         @Test
-        void aSettingsFileTheConfigNamesInTheCheckoutIsTheTasksAlone() throws IOException {
+        void aSettingsFileTheConfigNamesInTheCheckoutIsTheBuilds() throws IOException {
             f.pom("pom.xml", project("child", ""))
                     .pom("settings.xml", CHECKED_IN)
                     .pom(".mvn/maven.config", "-B\n-s\nsettings.xml\n");
@@ -2706,11 +2720,58 @@ class MavenEcosystemTest {
             assertThat(List.of(own.value(), own.file(), own.line()))
                     .as("the file, where the config names it")
                     .isEqualTo(List.of("settings.xml", ".mvn/maven.config", 3));
-            assertThat(configured()).as("no file beside the checked-in one").isEmpty();
+            assertThat(own.note())
+                    .as("every build reads it, so no build goes without it")
+                    .doesNotContain("without -s");
+        }
+
+        /** Harm prevented: a mirror of every repository in the workflow's file is passed by. */
+        @Test
+        void aPlainBuildBesideAWorkflowsSettingsFileGoesThroughItsMirror() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom(
+                            "build/settings.xml",
+                            """
+                            <settings><mirrors><mirror><id>inhouse</id><mirrorOf>*</mirrorOf>
+                              <url>https://repo.example.org/maven</url></mirror></mirrors></settings>
+                            """)
+                    .pom(
+                            ".github/workflows/build.yml",
+                            STEPS + "      - run: ./mvnw -B -s build/settings.xml verify\n");
+
+            assertThat(configured())
+                    .singleElement()
+                    .satisfies(
+                            file ->
+                                    assertThat(file.content())
+                                            .as("the mirror takes every repository, as there")
+                                            .contains("<mirrorOf>*</mirrorOf>"));
+        }
+
+        /**
+         * Harm prevented: a plain build in the task, without the workflow's -s, is refused the
+         * hosts the workflow's command is given.
+         */
+        @Test
+        void aPlainBuildBesideAWorkflowsSettingsFileReachesItsRepositories() throws IOException {
+            f.pom("pom.xml", project("child", ""))
+                    .pom("build/settings.xml", CHECKED_IN)
+                    .pom(
+                            ".github/workflows/build.yml",
+                            STEPS + "      - run: ./mvnw -B -s build/settings.xml verify\n");
+
+            assertThat(configured())
+                    .as("the settings a build without -s reads send it to the broker")
+                    .singleElement()
+                    .satisfies(
+                            file ->
+                                    assertThat(file.content())
+                                            .as("the repository the workflow's settings reach")
+                                            .contains(INHOUSE.url()));
         }
 
         @Test
-        void aSettingsFileAWorkflowNamesInTheCheckoutIsTheTasksAlone() throws IOException {
+        void aSettingsFileAWorkflowNamesInTheCheckoutIsTheBuilds() throws IOException {
             f.pom("pom.xml", project("child", ""))
                     .pom("build/settings.xml", CHECKED_IN)
                     .pom(
@@ -2725,8 +2786,8 @@ class MavenEcosystemTest {
             Finding own = only("extension.ownSettings");
 
             assertThat(List.of(own.value(), own.file(), own.line()))
+                    .as("the file, where the workflow names it")
                     .isEqualTo(List.of("build/settings.xml", ".github/workflows/build.yml", 4));
-            assertThat(configured()).isEmpty();
         }
 
         @Test
@@ -2876,7 +2937,7 @@ class MavenEcosystemTest {
 
         @ParameterizedTest
         @ValueSource(strings = {"none", "outside", "missing"})
-        void withoutACheckedInFileTheGeneratedOneStandsIn(String which) throws IOException {
+        void withoutACheckedInFileOnlyTheGeneratedOneIsRead(String which) throws IOException {
             f.pom("pom.xml", project("child", ""));
             Path outside = f.home.resolve("corp-settings.xml");
             Files.writeString(outside, CHECKED_IN);

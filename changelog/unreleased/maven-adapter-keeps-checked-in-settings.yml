@@ -1,2 +1,2 @@
-title: Write no Maven settings file for a task when the checkout holds the one its build uses, named with -s in .mvn/maven.config or passed to Maven by a workflow of the checkout; the draft names that file and says that none is generated.
+title: Read the hosts of the Maven settings file the checkout holds for its build, named with -s in .mvn/maven.config or passed to Maven by a workflow of the checkout, and name that file in the draft; the settings file generated for the task stays, so a plain build without the workflow's -s reaches the same repositories and mirrors through the broker as the workflow's command.
 type: added
