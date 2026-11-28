@@ -10,6 +10,7 @@ import java.util.Map;
 import org.fuin.porelo.ecosystem.api.Finding;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /** Harm prevented: a project gets a distribution's version, or no tool at all. */
@@ -557,6 +558,36 @@ class ToolResolverTest {
                 .satisfies(
                         f -> {
                             assertThat(f.unknown()).isTrue();
+                            assertThat(f.note()).contains("Java4Shell");
+                        });
+    }
+
+    /** Harm prevented: a distribution's JDK, as open as the vendor's refused one, stands in. */
+    @ParameterizedTest
+    @CsvSource({"'25', package.openjdk-25-jdk-headless", "'', package.default-jdk-headless"})
+    void anOpenNewestTemurinLeavesTheJdkUnknown(String java, String packageKey) {
+        if (!java.isEmpty()) {
+            asked.add(finding("java.version", java, false));
+        }
+        asked.add(finding(packageKey, packageKey.substring("package.".length()), false));
+        answers.put(
+                "https://api.adoptium.net/v3/assets/latest/25/hotspot?architecture=x64&image_type=jdk"
+                        + "&os=linux&vendor=eclipse",
+                """
+                [{"binary":{"package":{"checksum":"%s","link":"https://github.com/j25.tgz"}},
+                  "version":{"openjdk_version":"25.0.5+11-LTS","semver":"25.0.5+11.0.LTS"}}]
+                """
+                        .formatted(SHA256));
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(all).as("no JDK installed").noneMatch(f -> f.key().equals("run.1-java"));
+        assertThat(only(all, packageKey))
+                .as("no package in its stead, and the draft says why")
+                .satisfies(
+                        f -> {
+                            assertThat(f.unknown()).isTrue();
+                            assertThat(f.value()).isEmpty();
                             assertThat(f.note()).contains("Java4Shell");
                         });
     }

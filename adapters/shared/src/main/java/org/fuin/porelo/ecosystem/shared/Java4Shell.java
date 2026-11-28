@@ -38,9 +38,12 @@ final class Java4Shell {
             throw new ToolUnavailable(
                     vendor
                             + " "
-                            + version
+                            + (graalvmRelease == null
+                                    ? version
+                                    : MAJOR + "." + graalvmRelease + " (JDK " + version + ")")
                             + " is open to Java4Shell (CVE-2026-114938); for Java 25 only a JDK"
-                            + " from 25.0.5.1 is taken, and of GraalVM CE only 25.6 or later");
+                            + " from 25.0.5.1 is taken, and of GraalVM CE only 25.6 or later",
+                    true);
         }
     }
 

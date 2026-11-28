@@ -79,6 +79,16 @@ class JdkDownloadsTest {
                     .isEqualTo("25.0.5.1+2-LTS");
         }
 
+        @Test
+        void aTemurinWithATwoDigitPartAboveTheFloorIsTaken() {
+            temurinAnswers(
+                    25, temurin("25.0.10+1-LTS", "https://github.com/adoptium/jdk.tar.gz", SHA256));
+
+            assertThat(tools.temurin(25).version())
+                    .as("10 is above 5 as a number")
+                    .isEqualTo("25.0.10+1-LTS");
+        }
+
         /** Harm prevented: a JDK whose Base64 decoder lets data run code goes into a task. */
         @Test
         void aTemurinOpenToJava4ShellIsRefused() {
@@ -396,7 +406,9 @@ class JdkDownloadsTest {
                 strings = {
                     "graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz",
                     "graalvm-community-jdk-25i1-25.0.1_linux-x64_bin.tar.gz",
-                    "graalvm-community-jdk-25.0.2_linux-x64_bin.tar.gz"
+                    "graalvm-community-jdk-25.0.2_linux-x64_bin.tar.gz",
+                    "graalvm-community-jdk-25i5-25.0.5.1_linux-x64_bin.tar.gz",
+                    "graalvm-community-jdk-25i6-25.0.5_linux-x64_bin.tar.gz"
                 })
         void theNewestReleaseOpenToJava4ShellIsRefused(String asset) {
             answers.put(RELEASES, "[" + release(false, asset) + "]");
@@ -405,6 +417,20 @@ class JdkDownloadsTest {
                     .as("unknown in the draft, never installed")
                     .isInstanceOf(ToolUnavailable.class)
                     .hasMessageContaining("Java4Shell");
+        }
+
+        /** Harm prevented: a fixed GraalVM is refused, so the task has none. */
+        @ParameterizedTest
+        @CsvSource({
+            "graalvm-community-jdk-25i10-25.0.10_linux-x64_bin.tar.gz, 25, 25.0.10",
+            "graalvm-community-jdk-26i1-26.0.1_linux-x64_bin.tar.gz, 26, 26.0.1"
+        })
+        void aReleaseAboveTheFloorIsTaken(String asset, int major, String version) {
+            answers.put(RELEASES, "[" + release(false, asset) + "]");
+
+            assertThat(tools.graalvm(major).version())
+                    .as("parts compared as numbers, and only Java 25 floored")
+                    .isEqualTo(version);
         }
 
         @Test

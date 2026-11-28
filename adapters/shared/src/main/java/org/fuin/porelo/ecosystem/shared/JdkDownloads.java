@@ -19,7 +19,7 @@ public final class JdkDownloads {
     // 25i6-25.0.5.1 since GraalVM split its own releases, 25.0.2 before: read in both forms.
     static final Pattern GRAALVM_ASSET =
             Pattern.compile(
-                    "graalvm-community-jdk-(?:(?<feature>\\d{1,4})i(?<release>\\d{1,4})-)?"
+                    "graalvm-community-jdk-(?:\\d{1,4}i(?<release>\\d{1,4})-)?"
                             + "(?<version>(?<base>\\d{1,4})(?:\\.[0-9.]*)?)_linux-x64_bin\\.tar\\.gz");
 
     // 1000 assets a release, as GitHub allows, under 2 KiB each: five stay under the 16 MiB bound.
@@ -31,11 +31,10 @@ public final class JdkDownloads {
      * The major of a GraalVM archive's name that {@link #GRAALVM_ASSET} matched.
      *
      * @param name the match
-     * @return its JDK's major version
+     * @return its JDK's major version, the first part of the JDK's own version
      */
     static int graalvmMajor(Matcher name) {
-        return Integer.parseInt(
-                name.group("feature") != null ? name.group("feature") : name.group("base"));
+        return Integer.parseInt(name.group("base"));
     }
 
     /**

@@ -32,7 +32,9 @@ class JdkPinTest {
             strings = {
                 "graal-25.5.5.0.3/graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz",
                 "graal-25.1.1/graalvm-community-jdk-25i1-25.0.1_linux-x64_bin.tar.gz",
-                "jdk-25.0.2/graalvm-community-jdk-25.0.2_linux-x64_bin.tar.gz"
+                "jdk-25.0.2/graalvm-community-jdk-25.0.2_linux-x64_bin.tar.gz",
+                "graal-25.5.5.1/graalvm-community-jdk-25i5-25.0.5.1_linux-x64_bin.tar.gz",
+                "graal-25.6.5/graalvm-community-jdk-25i6-25.0.5_linux-x64_bin.tar.gz"
             })
     void aGraalvmPinOpenToJava4ShellIsRefused(String path) {
         assertThatThrownBy(() -> JdkPin.of(GRAALVM + path, DIGEST))

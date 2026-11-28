@@ -228,7 +228,14 @@ final class ToolResolver {
                 all.add(line(at, "env." + name, "/opt/java", where));
             }
         } catch (ToolUnavailable e) {
-            noted(all, packages, "Java " + major, e, false);
+            if (e.openJdk()) {
+                // A distribution's package of that release is no less open, and its version is not
+                // read.
+                String why = "Java " + major + " was asked, and not found: " + e.getMessage();
+                all.stream().filter(packages).toList().forEach(p -> annotate(all, p, true, why));
+            } else {
+                noted(all, packages, "Java " + major, e, false);
+            }
         }
     }
 
