@@ -36,25 +36,24 @@ public record JdkPin(String vendor, int major, ToolDownload download) {
      * @param url the archive's address
      * @param digest its hex digest as written, trimmed and in either case
      * @return the pin
-     * @throws ToolUnavailable when the file name is no known vendor's, or the address or digest
-     *     would not be taken from a vendor either
+     * @throws ToolUnavailable when the file name is no known vendor's, the JDK is open to
+     *     Java4Shell, or the address or digest would not be taken from a vendor either
      */
     public static JdkPin of(String url, String digest) {
         String hex = digest.strip().toLowerCase(Locale.ROOT);
         String name = fileName(url);
         Matcher graalvm = JdkDownloads.GRAALVM_ASSET.matcher(name);
         if (graalvm.matches()) {
-            int major =
-                    Integer.parseInt(
-                            graalvm.group(1) != null ? graalvm.group(1) : graalvm.group(3));
-            return new JdkPin("GraalVM", major, new ToolDownload(graalvm.group(2), url, hex));
+            int major = JdkDownloads.graalvmMajor(graalvm);
+            String version = graalvm.group("version");
+            Java4Shell.refuseOpen("GraalVM CE", major, graalvm.group("release"), version);
+            return new JdkPin("GraalVM", major, new ToolDownload(version, url, hex));
         }
         Matcher temurin = TEMURIN.matcher(name);
         if (temurin.matches()) {
-            return new JdkPin(
-                    "Temurin",
-                    Integer.parseInt(temurin.group(1)),
-                    new ToolDownload(temurin.group(2), url, hex));
+            int major = Integer.parseInt(temurin.group(1));
+            Java4Shell.refuseOpen("Temurin", major, null, temurin.group(2));
+            return new JdkPin("Temurin", major, new ToolDownload(temurin.group(2), url, hex));
         }
         throw new ToolUnavailable("its file name " + name + " is no GraalVM CE or Temurin archive");
     }

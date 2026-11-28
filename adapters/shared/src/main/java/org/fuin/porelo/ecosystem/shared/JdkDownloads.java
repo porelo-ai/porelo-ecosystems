@@ -16,15 +16,27 @@ import org.jspecify.annotations.Nullable;
 
 /** Finds the newest stable JDK of a major, from each JDK's own vendor. */
 public final class JdkDownloads {
-    // 25i5-25.0.5.0.3 since GraalVM split its own releases, 25.0.2 before: read in both forms.
+    // 25i6-25.0.5.1 since GraalVM split its own releases, 25.0.2 before: read in both forms.
     static final Pattern GRAALVM_ASSET =
             Pattern.compile(
-                    "graalvm-community-jdk-(?:(\\d{1,4})i\\d+-)?((\\d{1,4})(?:\\.[0-9.]*)?)_linux-x64_bin\\.tar\\.gz");
+                    "graalvm-community-jdk-(?:(?<feature>\\d{1,4})i(?<release>\\d{1,4})-)?"
+                            + "(?<version>(?<base>\\d{1,4})(?:\\.[0-9.]*)?)_linux-x64_bin\\.tar\\.gz");
 
     // 1000 assets a release, as GitHub allows, under 2 KiB each: five stay under the 16 MiB bound.
     static final int RELEASES_PER_PAGE = 5;
 
     private final VendorFetch fetch;
+
+    /**
+     * The major of a GraalVM archive's name that {@link #GRAALVM_ASSET} matched.
+     *
+     * @param name the match
+     * @return its JDK's major version
+     */
+    static int graalvmMajor(Matcher name) {
+        return Integer.parseInt(
+                name.group("feature") != null ? name.group("feature") : name.group("base"));
+    }
 
     /**
      * Asks the vendors through one fetch.
@@ -40,7 +52,8 @@ public final class JdkDownloads {
      *
      * @param major the JDK's major version
      * @return its archive
-     * @throws ToolUnavailable when the vendor names none, which it says with an empty list
+     * @throws ToolUnavailable when the vendor names none, which it says with an empty list, or its
+     *     newest is open to Java4Shell
      */
     public ToolDownload temurin(int major) {
         URI uri =
@@ -54,10 +67,11 @@ public final class JdkDownloads {
         }
         Map<?, ?> row = map(rows.get(0));
         Map<?, ?> archive = map(map(row.get("binary")).get("package"));
-        return new ToolDownload(
-                text(map(row.get("version")).get("semver")),
-                text(archive.get("link")),
-                text(archive.get("checksum")));
+        // Its semver folds a fourth version part into the build number, which openjdk_version
+        // keeps.
+        String version = text(map(row.get("version")).get("openjdk_version"));
+        Java4Shell.refuseOpen("Temurin", major, null, version);
+        return new ToolDownload(version, text(archive.get("link")), text(archive.get("checksum")));
     }
 
     /**
@@ -65,7 +79,8 @@ public final class JdkDownloads {
      *
      * @param major the JDK's major version
      * @return its archive
-     * @throws ToolUnavailable when none is listed, or the list is refused
+     * @throws ToolUnavailable when none is listed, the list is refused, or the newest is open to
+     *     Java4Shell
      */
     public ToolDownload graalvm(int major) {
         for (int page = 1; ; page++) {
@@ -105,12 +120,13 @@ public final class JdkDownloads {
             for (Object one : assets) {
                 Map<?, ?> asset = map(one);
                 Matcher name = GRAALVM_ASSET.matcher(text(asset.get("name")));
-                if (name.matches()
-                        && Integer.parseInt(name.group(1) != null ? name.group(1) : name.group(3))
-                                == major) {
+                if (name.matches() && graalvmMajor(name) == major) {
+                    // The releases come newest first, so an older one is no way out.
+                    Java4Shell.refuseOpen(
+                            "GraalVM CE", major, name.group("release"), name.group("version"));
                     return Optional.of(
                             new ToolDownload(
-                                    name.group(2),
+                                    name.group("version"),
                                     text(asset.get("browser_download_url")),
                                     graalvmDigest(asset, assets)));
                 }

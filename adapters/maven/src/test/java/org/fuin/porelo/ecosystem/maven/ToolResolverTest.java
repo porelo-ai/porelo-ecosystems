@@ -49,9 +49,9 @@ class ToolResolverTest {
                         + "/hotspot?architecture=x64&image_type=jdk&os=linux&vendor=eclipse",
                 """
                 [{"binary":{"package":{"checksum":"%s","link":"https://github.com/j%d.tgz"}},
-                  "version":{"semver":"%d.0.5+8"}}]
+                  "version":{"openjdk_version":"%d.0.6+8-LTS","semver":"%d.0.6+8.0.LTS"}}]
                 """
-                        .formatted(SHA256, major, major));
+                        .formatted(SHA256, major, major, major));
     }
 
     private void maven() {
@@ -68,7 +68,7 @@ class ToolResolverTest {
                 "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1",
                 """
                 [{"prerelease":false,"draft":false,"assets":[
-                  {"name":"graalvm-community-jdk-%di5-%d.0.5_linux-x64_bin.tar.gz",
+                  {"name":"graalvm-community-jdk-%di6-%d.0.5.1_linux-x64_bin.tar.gz",
                    "browser_download_url":"https://github.com/g.tgz","digest":"sha256:%s"}]}]
                 """
                         .formatted(major, major, SHA256));
@@ -96,7 +96,7 @@ class ToolResolverTest {
         assertThat(only(all, "run.1-java").value())
                 .as("the vendor's own")
                 .contains("https://github.com/j21.tgz");
-        assertThat(only(all, "run.1-java").note()).as("names what it fetched").contains("21.0.5+8");
+        assertThat(only(all, "run.1-java").note()).as("names what it fetched").contains("21.0.6+8");
         assertThat(only(all, "env.JAVA_HOME").value())
                 .as("a build's plugin may need it")
                 .isEqualTo("/opt/java");
@@ -469,14 +469,17 @@ class ToolResolverTest {
     }
 
     private static final String PINNED_GRAAL =
+            "https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-25.6.5.1/"
+                    + "graalvm-community-jdk-25i6-25.0.5.1_linux-x64_bin.tar.gz";
+    private static final String PINNED_OPEN_GRAAL =
             "https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-25.5.5.0.3/"
                     + "graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz";
     private static final String PINNED_TEMURIN_21 =
             "https://github.com/adoptium/temurin21-binaries/releases/download/jdk-21.0.4%2B7/"
                     + "OpenJDK21U-jdk_x64_linux_hotspot_21.0.4_7.tar.gz";
     private static final String PINNED_TEMURIN_25 =
-            "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.1%2B8/"
-                    + "OpenJDK25U-jdk_x64_linux_hotspot_25.0.1_8.tar.gz";
+            "https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.5.1%2B2/"
+                    + "OpenJDK25U-jdk_x64_linux_hotspot_25.0.5.1_2.tar.gz";
 
     private static Finding pin(String name, String url) {
         return finding("jdk.pin." + name, url + " " + "c".repeat(64), false);
@@ -505,6 +508,57 @@ class ToolResolverTest {
                 .as("no second GraalVM and no distribution JDK")
                 .noneMatch(f -> f.key().equals("run.2-graalvm"))
                 .noneMatch(f -> f.key().startsWith("package.openjdk-"));
+    }
+
+    /** Harm prevented: a checkout's pin installs a GraalVM whose Base64 decoder runs data. */
+    @Test
+    void aPinnedGraalvmOpenToJava4ShellGivesWayToTheVendorsNewest() {
+        asked.add(finding("java.version", "25", false));
+        asked.add(finding("package.openjdk-25-jdk-headless", "x", false));
+        asked.add(finding("graalvm.version", "", false));
+        asked.add(pin("g", PINNED_OPEN_GRAAL));
+        temurin(25);
+        graalvm(25);
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(all)
+                .as("the open archive is installed nowhere")
+                .noneMatch(f -> f.value().contains(PINNED_OPEN_GRAAL));
+        assertThat(only(all, "jdk.pin.g").note())
+                .as("the draft says why the pin is not taken")
+                .contains("Java4Shell");
+        assertThat(only(all, "run.2-graalvm").note())
+                .as("GraalVM's newest fixed release stands in")
+                .contains("25.0.5.1");
+    }
+
+    /** Harm prevented: GraalVM's newest release, still open, is installed into a task. */
+    @Test
+    void anOpenNewestGraalvmLeavesItUnknown() {
+        asked.add(finding("java.version", "25", false));
+        asked.add(finding("package.openjdk-25-jdk-headless", "x", false));
+        asked.add(finding("graalvm.version", "", false));
+        temurin(25);
+        answers.put(
+                "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1",
+                """
+                [{"prerelease":false,"draft":false,"assets":[
+                  {"name":"graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz",
+                   "browser_download_url":"https://github.com/g.tgz","digest":"sha256:%s"}]}]
+                """
+                        .formatted(SHA256));
+
+        List<Finding> all = resolver.resolve(asked);
+
+        assertThat(all).as("not installed").noneMatch(f -> f.key().equals("run.2-graalvm"));
+        assertThat(only(all, "graalvm.version"))
+                .as("unknown, and the draft says why")
+                .satisfies(
+                        f -> {
+                            assertThat(f.unknown()).isTrue();
+                            assertThat(f.note()).contains("Java4Shell");
+                        });
     }
 
     @Test

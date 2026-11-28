@@ -1,0 +1,2 @@
+title: The Maven adapter never installs a JDK open to Java4Shell (CVE-2026-114938) into a task - for Java 25 neither a GraalVM CE from 25.1 up to but not including 25.6 nor any JDK below 25.0.5.1, whether a vendor's newest or a checkout's own pin - and is built by GraalVM 25.6.
+type: security

@@ -39,11 +39,13 @@ class JdkDownloadsTest {
                 json);
     }
 
-    private static String temurin(String semver, String link, String checksum) {
+    // Adoptium's semver folds a fourth part into its build number; openjdk_version keeps it.
+    private static String temurin(String version, String link, String checksum) {
         return """
-                [{"binary":{"package":{"checksum":"%s","link":"%s"}},"version":{"semver":"%s"}}]
+                [{"binary":{"package":{"checksum":"%s","link":"%s"}},
+                  "version":{"openjdk_version":"%s","semver":"%s"}}]
                 """
-                .formatted(checksum, link, semver);
+                .formatted(checksum, link, version, version);
     }
 
     /** Harm prevented: a build gets another JDK than asked, or none, or one it cannot check. */
@@ -52,11 +54,41 @@ class JdkDownloadsTest {
         @Test
         void theVendorsRowGivesVersionAddressAndDigest() {
             String link = "https://github.com/adoptium/temurin21-binaries/jdk.tar.gz";
-            temurinAnswers(21, temurin("21.0.13+9.0.LTS", link, SHA256));
+            temurinAnswers(21, temurin("21.0.13+9-LTS", link, SHA256));
 
             assertThat(tools.temurin(21))
                     .as("exactly what the vendor names")
-                    .isEqualTo(new ToolDownload("21.0.13+9.0.LTS", link, SHA256));
+                    .isEqualTo(new ToolDownload("21.0.13+9-LTS", link, SHA256));
+        }
+
+        /** Harm prevented: the fixed JDK is refused, or an open one taken, by a folded version. */
+        @Test
+        void theFourthPartOfTheVersionIsReadWhereTheVendorKeepsIt() {
+            String link = "https://github.com/adoptium/temurin25-binaries/jdk.tar.gz";
+            temurinAnswers(
+                    25,
+                    """
+                    [{"binary":{"package":{"checksum":"%s","link":"%s"}},
+                      "version":{"openjdk_version":"25.0.5.1+2-LTS",
+                                 "semver":"25.0.5+100000002.0.LTS"}}]
+                    """
+                            .formatted(SHA256, link));
+
+            assertThat(tools.temurin(25).version())
+                    .as("measured: Adoptium's answer for Temurin 25.0.5.1+2")
+                    .isEqualTo("25.0.5.1+2-LTS");
+        }
+
+        /** Harm prevented: a JDK whose Base64 decoder lets data run code goes into a task. */
+        @Test
+        void aTemurinOpenToJava4ShellIsRefused() {
+            temurinAnswers(
+                    25, temurin("25.0.5+11-LTS", "https://github.com/adoptium/jdk.tar.gz", SHA256));
+
+            assertThatThrownBy(() -> tools.temurin(25))
+                    .as("unknown in the draft, never installed")
+                    .isInstanceOf(ToolUnavailable.class)
+                    .hasMessageContaining("Java4Shell");
         }
 
         @Test
@@ -233,7 +265,7 @@ class JdkDownloadsTest {
                     "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=1",
                     """
                     [{"prerelease":false,"draft":false,"assets":[
-                      {"name":"graalvm-community-jdk-25.0.2_linux-x64_bin.tar.gz",
+                      {"name":"graalvm-community-jdk-25i6-25.0.5.1_linux-x64_bin.tar.gz",
                        "browser_download_url":"https://github.com/a.tgz","digest":"md5:%s"}]}]
                     """
                             .formatted(SHA256));
@@ -278,14 +310,14 @@ class JdkDownloadsTest {
                     "["
                             + release(
                                     false,
-                                    "graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz")
+                                    "graalvm-community-jdk-25i6-25.0.5.1_linux-x64_bin.tar.gz")
                             + "]");
 
             assertThat(tools.graalvm(25))
                     .as("a filter on jdk-25 would stop at 25.0.2")
                     .satisfies(
                             g -> {
-                                assertThat(g.version()).as("version").isEqualTo("25.0.5.0.3");
+                                assertThat(g.version()).as("version").isEqualTo("25.0.5.1");
                                 assertThat(g.digest()).as("no algorithm's name").isEqualTo(SHA256);
                             });
         }
@@ -295,10 +327,10 @@ class JdkDownloadsTest {
             answers.put(
                     RELEASES,
                     "["
-                            + release(false, "graalvm-community-jdk-25.0.2_linux-x64_bin.tar.gz")
+                            + release(false, "graalvm-community-jdk-21.0.2_linux-x64_bin.tar.gz")
                             + "]");
 
-            assertThat(tools.graalvm(25).version()).as("before the split").isEqualTo("25.0.2");
+            assertThat(tools.graalvm(21).version()).as("before the split").isEqualTo("21.0.2");
         }
 
         @Test
@@ -307,18 +339,19 @@ class JdkDownloadsTest {
                     RELEASES,
                     "["
                             + release(
-                                    true, "graalvm-community-jdk-25i6-25.0.6_linux-x64_bin.tar.gz")
+                                    true, "graalvm-community-jdk-25i7-25.0.6_linux-x64_bin.tar.gz")
                             + ","
                             + release(
                                     false, "graalvm-community-jdk-26i1-26.0.1_linux-x64_bin.tar.gz")
                             + ","
                             + release(
-                                    false, "graalvm-community-jdk-25i5-25.0.5_linux-x64_bin.tar.gz")
+                                    false,
+                                    "graalvm-community-jdk-25i6-25.0.5.1_linux-x64_bin.tar.gz")
                             + "]");
 
             assertThat(tools.graalvm(25).version())
                     .as("the newest stable of this major")
-                    .isEqualTo("25.0.5");
+                    .isEqualTo("25.0.5.1");
         }
 
         private String fullPageOf26() {
@@ -334,12 +367,13 @@ class JdkDownloadsTest {
                     "https://api.github.com/repos/graalvm/graalvm-ce-builds/releases?per_page=5&page=2",
                     "["
                             + release(
-                                    false, "graalvm-community-jdk-25i5-25.0.5_linux-x64_bin.tar.gz")
+                                    false,
+                                    "graalvm-community-jdk-25i6-25.0.5.1_linux-x64_bin.tar.gz")
                             + "]");
 
             assertThat(tools.graalvm(25).version())
                     .as("found on the second page")
-                    .isEqualTo("25.0.5");
+                    .isEqualTo("25.0.5.1");
         }
 
         /** Harm prevented: a list that ends on a full page is asked for pages without end. */
@@ -354,6 +388,23 @@ class JdkDownloadsTest {
                     .as("said as none found once GitHub lists no more")
                     .isInstanceOf(ToolUnavailable.class)
                     .hasMessage("GraalVM names no release for JDK 25");
+        }
+
+        /** Harm prevented: a GraalVM whose Base64 decoder lets data run code goes into a task. */
+        @ParameterizedTest
+        @ValueSource(
+                strings = {
+                    "graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz",
+                    "graalvm-community-jdk-25i1-25.0.1_linux-x64_bin.tar.gz",
+                    "graalvm-community-jdk-25.0.2_linux-x64_bin.tar.gz"
+                })
+        void theNewestReleaseOpenToJava4ShellIsRefused(String asset) {
+            answers.put(RELEASES, "[" + release(false, asset) + "]");
+
+            assertThatThrownBy(() -> tools.graalvm(25))
+                    .as("unknown in the draft, never installed")
+                    .isInstanceOf(ToolUnavailable.class)
+                    .hasMessageContaining("Java4Shell");
         }
 
         @Test
@@ -374,7 +425,7 @@ class JdkDownloadsTest {
 
         @Test
         void anAnswerLongerThanSnakeYamlsDefaultIsReadWhole() {
-            String asset = "graalvm-community-jdk-25i5-25.0.5.0.3_linux-x64_bin.tar.gz";
+            String asset = "graalvm-community-jdk-25i6-25.0.5.1_linux-x64_bin.tar.gz";
             String filler =
                     "{\"prerelease\":true,\"draft\":false,\"assets\":[],\"body\":\""
                             + "x".repeat(1024 * 1024)
@@ -392,7 +443,7 @@ class JdkDownloadsTest {
 
             assertThat(tools.graalvm(25).version())
                     .as("GitHub's list of GraalVM's releases was 5.4 MB, SnakeYAML's default 3")
-                    .isEqualTo("25.0.5.0.3");
+                    .isEqualTo("25.0.5.1");
         }
 
         @Test
@@ -402,7 +453,7 @@ class JdkDownloadsTest {
                     21,
                     """
                     [{"binary":{"package":{"checksum":"%1$s","link":"%2$s","link":"%2$s.x"}},
-                      "version":{"semver":"21.0.13+9.0.LTS"}}]
+                      "version":{"openjdk_version":"21.0.13+9-LTS","semver":"21.0.13+9.0.LTS"}}]
                     """
                             .formatted(SHA256, link));
 

@@ -110,7 +110,7 @@ class MavenEcosystemTest {
     class TheJdk {
         private static final String GRAAL =
                 "https://github.com/graalvm/graalvm-ce-builds/releases/download/graal-%s/"
-                        + "graalvm-community-jdk-25i5-25.0.5.0.3_%s";
+                        + "graalvm-community-jdk-25i6-25.0.5.1_%s";
 
         /** Harm prevented: the task builds with another JDK than the one the checkout pins. */
         @Test
@@ -121,7 +121,7 @@ class MavenEcosystemTest {
                             "child",
                             """
                               <properties>
-                                <g.version>25.5.5.0.3</g.version>
+                                <g.version>25.6.5.1</g.version>
                                 <g.url>%s</g.url>
                                 <g.sha256>
                                   %s
@@ -147,9 +147,7 @@ class MavenEcosystemTest {
                                 assertThat(pin.key()).isEqualTo("jdk.pin.g");
                                 assertThat(pin.value())
                                         .isEqualTo(
-                                                GRAAL.formatted(
-                                                                "25.5.5.0.3",
-                                                                "linux-x64_bin.tar.gz")
+                                                GRAAL.formatted("25.6.5.1", "linux-x64_bin.tar.gz")
                                                         + " "
                                                         + "c".repeat(64));
                                 assertThat(pin.line()).as("the address's line").isPositive();
